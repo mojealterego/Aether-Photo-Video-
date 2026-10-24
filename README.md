@@ -45,3 +45,7 @@ See [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), [Acceptanc
 ## Licensing
 
 Project source license and licenses for external neural checkpoints are independent. Model weights are intentionally excluded. Review rights to CodeFormer, GFPGAN, InsightFace, diffusion checkpoints and extensions before any commercial distribution.
+
+## Imported research requirements
+
+The full 64-page Argon-supplied 400 MP research transcription is archived in [source-material](docs/source-material/). All technical requests are tracked, without silent omission, in [ARGON-400MP requirements](docs/requirements/ARGON-400MP.md). The original PDF remains the fidelity reference for formulas and figures. New code is tested separately; archival text is not automatically runnable.

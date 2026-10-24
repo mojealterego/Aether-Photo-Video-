@@ -33,3 +33,9 @@
 - [ ] End-to-end tests, packaging, accessibility, release engineering.
 
 A roadmap item is complete only with reproducible evidence, not because source code has been drafted.
+
+## Argon 400 MP PDF — requirements intake
+- [x] Archive page-by-page text of all 64 pages with source hash and attribution.
+- [x] Establish requirement IDs A400-01..12 and A400-X01..X10.
+- [x] Implement and test disk-backed Gaussian WOLA with normalization exactly once.
+- [ ] Complete remaining A400 requirements and Android/ComfyUI acceptance evidence. See docs/requirements/ARGON-400MP.md.
