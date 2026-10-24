@@ -65,3 +65,30 @@ class DepthAnyOnnxAdapter:
             normalized=1-normalized
         return np.asarray(Image.fromarray(normalized,mode='F').resize(
             (w,h),Image.Resampling.BILINEAR),dtype='f4').clip(0,1)
+
+
+def relative_depth_focus_mask(preview_rgb:np.ndarray, depth:np.ndarray, *,
+                              focus_depth:float=.5, tolerance:float=.15,
+                              texture_weight:float=.35)->np.ndarray:
+    """Bounded relative-depth gate for a chosen focus plane; no metric DoF claim.
+
+    Output is a normalized 2D MASK. Can be used by the mobile renderer or
+    optionally refined with the core's guided filter.
+    """
+    preview=np.asarray(preview_rgb,dtype=np.float32)
+    d=np.asarray(depth,dtype=np.float32)
+    if (preview.ndim!=3 or preview.shape[2]!=3 or d.shape!=preview.shape[:2] or
+        not np.isfinite(preview).all() or not np.isfinite(d).all() or
+        preview.min()<0 or preview.max()>1 or d.min()<0 or d.max()>1):
+        raise ValueError('Expected registered normalized preview and depth')
+    if not (0<=focus_depth<=1 and .01<=tolerance<=1 and 0<=texture_weight<=1):
+        raise ValueError('Invalid focus plane or texture weight')
+    gate=np.exp(-.5*((d-focus_depth)/tolerance)**2).astype(np.float32)
+    if texture_weight:
+        luma=.2126*preview[:,:,0]+.7152*preview[:,:,1]+.0722*preview[:,:,2]
+        gy,gx=np.gradient(luma)
+        magnitude=np.sqrt(gx*gx+gy*gy)
+        threshold=max(float(np.percentile(magnitude,98)),1e-6)
+        texture=np.clip(magnitude/threshold,0,1)
+        gate*=1-texture_weight+texture_weight*texture
+    return np.clip(gate,0,1).astype(np.float32)
