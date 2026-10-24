@@ -37,7 +37,33 @@ def main(argv: list[str] | None = None) -> int:
     restore.add_argument('--protected-mask', type=Path)
     restore.add_argument('--reserve-free-gb', type=float, default=1.0)
     restore.add_argument('--keep-stage', action='store_true')
+    auto = sub.add_parser('restore-auto', help='Offline S24 focus mask + optical render + RGB16 BigTIFF')
+    auto.add_argument('--source', type=Path, required=True)
+    auto.add_argument('--output', type=Path, required=True)
+    auto.add_argument('--workdir', type=Path, required=True)
+    auto.add_argument('--depth-map', type=Path, help='Optional relative-depth grayscale mask, not generated on device')
+    auto.add_argument('--target-mp', type=float, default=400.0)
+    auto.add_argument('--width', type=int)
+    auto.add_argument('--height', type=int)
+    auto.add_argument('--tile', type=int, default=256)
+    auto.add_argument('--detail-gain', type=float, default=0.0)
+    auto.add_argument('--psf-sigma', type=float, default=0.0)
+    auto.add_argument('--rl-iterations', type=int, default=0)
+    auto.add_argument('--ca-red', type=float, default=0.0)
+    auto.add_argument('--ca-blue', type=float, default=0.0)
+    auto.add_argument('--reserve-free-gb', type=float, default=1.0)
     args = parser.parse_args(argv)
+    if args.command == 'restore-auto':
+        from mobile_s24.auto_focus import FocusConfig, run_offline_auto
+        cfg = FocusConfig(args.source, args.workdir, depth_map=args.depth_map)
+        result = run_offline_auto(cfg, output=args.output,
+            target_width=args.width, target_height=args.height,
+            target_mp=args.target_mp, tile=args.tile, detail_gain=args.detail_gain,
+            psf_sigma=args.psf_sigma, rl_iterations=args.rl_iterations,
+            ca_red=args.ca_red, ca_blue=args.ca_blue,
+            reserve_gb=args.reserve_free_gb)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0
     if args.command == 'restore':
         from mobile_s24.s24_render import MobileConfig, run
         try:
