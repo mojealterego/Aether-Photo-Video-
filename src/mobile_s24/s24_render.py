@@ -7,7 +7,7 @@ recovers information missing from source. External inpaint hypotheses may be mer
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 from io import BytesIO
 import json
@@ -51,6 +51,9 @@ class MobileConfig:
     ca_blue: float = 0.0
     focus_mask: Path | None = None
     inpainted_base: Path | None = None
+    sr_candidate: Path | None = None
+    wavelet_levels: int = 3
+    wavelet_gain: float = 1.0
     inpaint_mask: Path | None = None
     protected_mask: Path | None = None
     inpaint_strength: float = 1.0
@@ -63,12 +66,18 @@ class MobileConfig:
     contiguous_output: bool = False
 
     def __post_init__(self) -> None:
-        for name in ('source', 'output', 'stage_dir', 'focus_mask', 'inpainted_base', 'inpaint_mask', 'protected_mask'):
+        for name in ('source', 'output', 'stage_dir', 'focus_mask', 'inpainted_base', 'sr_candidate', 'inpaint_mask', 'protected_mask'):
             value = getattr(self, name)
             if value is not None:
                 object.__setattr__(self, name, Path(value).expanduser())
         if (self.inpainted_base is None) != (self.inpaint_mask is None):
             raise ValueError('Inpaint candidate requires an explicit inpaint mask')
+        if self.sr_candidate is not None and self.focus_mask is None:
+            raise ValueError('Wavelet candidate requires a focus mask for bokeh protection')
+        if type(self.wavelet_levels) is not int or not 1 <= self.wavelet_levels <= 5:
+            raise ValueError('wavelet_levels must be 1..5')
+        if not math.isfinite(self.wavelet_gain) or not 0 <= self.wavelet_gain <= 2:
+            raise ValueError('wavelet_gain must be 0..2')
         if self.protected_mask is not None and self.inpaint_mask is None:
             raise ValueError('Protected mask requires an inpaint mask')
         if any(not math.isfinite(v) or not 0 <= v <= 1 for v in
@@ -360,13 +369,31 @@ def _focus_tile(image: Image.Image | None, ext: tuple[int, int, int, int],
 def _render_output_tile(source: Source, config: MobileConfig,
                         rect: tuple[int, int, int, int], target_hw: tuple[int, int],
                         focus_image: Image.Image | None,
-                        overlay: tuple[Source, Image.Image, Image.Image | None] | None = None) -> np.ndarray:
+                        overlay: tuple[Source, Image.Image, Image.Image | None] | None = None,
+                        sr_source: Source | None = None) -> np.ndarray:
     x0, y0, x1, y1 = rect
     th, tw = target_hw
     # Local working halo, so no border artifacts in optional acutance.
-    halo = 12
-    ext = (max(0, x0-halo), max(0, y0-halo), min(tw, x1+halo), min(th, y1+halo))
+    halo = max(12, (1 << config.wavelet_levels) * 2) if sr_source is not None else 12
+    # Align Haar window origins to global dyadic phase for inter-tile continuity.
+    phase = (1 << config.wavelet_levels) if sr_source is not None else 1
+    ext = (max(0, ((x0-halo)//phase)*phase), max(0, ((y0-halo)//phase)*phase),
+           min(tw, ((x1+halo+phase-1)//phase)*phase),
+           min(th, ((y1+halo+phase-1)//phase)*phase))
     linear = _resample_linear(source, ext, (th, tw), config.input_transfer, config, focus_image, overlay)
+    if sr_source is not None:
+        from aether.core.wavelet import wavelet_faithful_fusion
+        # Candidate may be synthetic. No duplicate optics on candidate.
+        neutral = replace(config, ca_red=0.0, ca_blue=0.0, psf_sigma=0.0, rl_iterations=0)
+        sr_linear = _resample_linear(sr_source, ext, (th,tw), config.input_transfer,
+                                     neutral, None, None)
+        spatial_mask = _focus_tile(focus_image,ext,(th,tw))
+        if spatial_mask is None:
+            raise RuntimeError('Missing focus mask for wavelet fusion')
+        protected_target = _focus_tile(overlay[2],ext,(th,tw)) if overlay is not None else None
+        linear = wavelet_faithful_fusion(linear,sr_linear,spatial_mask,
+                                        levels=config.wavelet_levels,high_gain=config.wavelet_gain,
+                                        protected_mask=protected_target)
     if config.detail_gain > 0:
         blur = _gaussian_blur(linear, sigma=1.15)
         high = np.clip(linear - blur, -0.025, 0.025)
@@ -399,6 +426,8 @@ def _file_signature(cfg: MobileConfig, tw: int, th: int) -> str:
     values = {'source_sha256': _fingerprint(cfg.source),
               'focus_sha256': _fingerprint(cfg.focus_mask) if cfg.focus_mask else None,
               'inpaint_sha256': _fingerprint(cfg.inpainted_base) if cfg.inpainted_base else None,
+              'sr_sha256': _fingerprint(cfg.sr_candidate) if cfg.sr_candidate else None,
+              'wavelet_levels': cfg.wavelet_levels, 'wavelet_gain': cfg.wavelet_gain,
               'inpaint_mask_sha256': _fingerprint(cfg.inpaint_mask) if cfg.inpaint_mask else None,
               'protected_sha256': _fingerprint(cfg.protected_mask) if cfg.protected_mask else None,
               'inpaint_strength': cfg.inpaint_strength, 'lab_color_match': cfg.lab_color_match,
@@ -478,13 +507,14 @@ def run(cfg: MobileConfig) -> dict[str, Any]:
     source: Source | None = None
     focus: Image.Image | None = None
     candidate: Source | None = None
+    sr_source: Source | None = None
     inpaint: Image.Image | None = None
     protected: Image.Image | None = None
     data: np.memmap | None = None
     try:
         # Reserve the configured process decode RAM across *both* PNG/JPEG sources.
         decoded_inputs = sum(Path(p).suffix.lower() not in ('.tif','.tiff')
-                             for p in (cfg.source, cfg.inpainted_base) if p is not None)
+                             for p in (cfg.source, cfg.inpainted_base, cfg.sr_candidate) if p is not None)
         per_decode_budget = max(1, cfg.max_decoded_ram_mb // max(1, decoded_inputs))
         source = Source(cfg.source, cfg.max_input_pixels, per_decode_budget)
         if cfg.inpainted_base is not None:
@@ -510,6 +540,13 @@ def run(cfg: MobileConfig) -> dict[str, Any]:
                   if cfg.target_width is not None else target_from_mp(source.width, source.height, cfg.target_mp))
         if tw*th > 1_000_000_000 or tw*th < 1:
             raise ValueError('Invalid or oversized requested output')
+        if cfg.sr_candidate is not None:
+            if not cfg.sr_candidate.is_file():
+                raise FileNotFoundError(cfg.sr_candidate)
+            sr_source = Source(cfg.sr_candidate, cfg.max_input_pixels,per_decode_budget)
+            if ((sr_source.width,sr_source.height) != (source.width,source.height) and
+                (sr_source.width,sr_source.height) != (tw,th)):
+                raise ValueError('SR candidate must match source or output dimensions')
         if cfg.focus_mask is not None:
             if not cfg.focus_mask.is_file():
                 raise FileNotFoundError(cfg.focus_mask)
@@ -560,7 +597,8 @@ def run(cfg: MobileConfig) -> dict[str, Any]:
                 x1 = min(x0+cfg.tile_size,tw)
                 overlay = ((candidate, inpaint, protected)
                            if candidate is not None and inpaint is not None else None)
-                tile = _render_output_tile(source, cfg, (x0,y0,x1,y1), (th,tw), focus, overlay) if overlay else _render_output_tile(source, cfg, (x0,y0,x1,y1), (th,tw), focus)
+                tile = _render_output_tile(source,cfg,(x0,y0,x1,y1),(th,tw),
+                                           focus,overlay,sr_source)
                 data[y0:y1,x0:x1] = tile
             data.flush()
             _save_json_atomic(checkpoint, {'signature':signature,'dimensions':[tw,th],'next_row':row+1})
@@ -575,6 +613,8 @@ def run(cfg: MobileConfig) -> dict[str, Any]:
                   'processing':'linear-light Lanczos + optional masked high-pass',
                   'generative_restoration':candidate is not None,
                   'inpaint_hypothesis':candidate is not None,
+                  'wavelet_sr_candidate':sr_source is not None,
+                  'wavelet_levels':cfg.wavelet_levels if sr_source is not None else None,
                   'identity_verified':False,
                   'inpaint_strength':cfg.inpaint_strength if candidate is not None else 0.,
                   'resumed_from_row':completed,
@@ -598,6 +638,8 @@ def run(cfg: MobileConfig) -> dict[str, Any]:
             protected.close()
         if candidate is not None:
             candidate.close()
+        if sr_source is not None:
+            sr_source.close()
         if data is not None:
             data.flush()
 
@@ -619,6 +661,9 @@ def main() -> int:
     p.add_argument('--focus-mask',type=Path)
     p.add_argument('--inpainted-base',type=Path,help='Registered hypothesis at original image size; not verifiable original detail')
     p.add_argument('--inpaint-mask',type=Path,help='Explicit grayscale L damage mask (<=16 MP)')
+    p.add_argument('--sr-candidate',type=Path,help='Registered SR hypothesis as RGB TIFF/PNG')
+    p.add_argument('--wavelet-levels',type=int,default=3)
+    p.add_argument('--wavelet-gain',type=float,default=1.0)
     p.add_argument('--protected-mask',type=Path,help='Regions never replaced by the hypothesis')
     p.add_argument('--inpaint-strength',type=float,default=1.0)
     p.add_argument('--lab-color-match',type=float,default=0.0)
@@ -636,6 +681,8 @@ def main() -> int:
                      psf_sigma=args.psf_sigma,rl_iterations=args.rl_iterations,
                      ca_red=args.ca_red,ca_blue=args.ca_blue,
                      focus_mask=args.focus_mask,inpainted_base=args.inpainted_base,
+                     sr_candidate=args.sr_candidate,wavelet_levels=args.wavelet_levels,
+                     wavelet_gain=args.wavelet_gain,
                      inpaint_mask=args.inpaint_mask,protected_mask=args.protected_mask,
                      inpaint_strength=args.inpaint_strength,lab_color_match=args.lab_color_match,
                      input_transfer=args.input_transfer,
