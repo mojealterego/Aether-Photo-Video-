@@ -12,6 +12,7 @@ dependencies = []
 [project.optional-dependencies]
 mobile = ["numpy>=1.26", "tifffile>=2024.2", "Pillow>=10"]
 optical = ["opencv-python-headless>=4.8"]
+face-server = ["opencv-python-headless>=4.8", "onnxruntime>=1.18"]
 server = ["numpy>=1.26", "tifffile>=2024.2", "opencv-python-headless>=4.8", "torch>=2.2"]
 test = ["pytest>=8"]
 
