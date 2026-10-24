@@ -1,0 +1,789 @@
+AETHER / ARGON SOURCE TEXT MIRROR
+Source: Potok Rekonstrukcji Obrazu 400 MP.PDF (64 pages)
+Original file SHA256: d5f955b871a66196229d75c911fe4dd02def4211e7e77d908ec955c820b48afc
+Pages: 17-32. PDF text extraction only; charts, columns, mathematical notation and embedded code may be malformed. NOT EXECUTABLE SOURCE.
+
+<PARSED TEXT FOR PAGE: 17 / 64>
+​
+    def estimate_or_get_lca_polynomials(​
+         self, img_lin: np.ndarray​
+    ) -> Tuple[Tuple[float, float, float, float], Tuple[float, float,
+float, float]]:​
+         """​
+         Estymuje współczynniki wielomianu parzystego rzędu p(r) = 1 +
+a2*r^2 + a4*r^4 + a6*r^6 + a8*r^8​
+         minimalizując rozbieżność gradientów na krawędziach
+tangencjalnych względem kanału G.​
+         """​
+         h, w, _ = img_lin.shape​
+         yy, xx = np.meshgrid(​
+              np.linspace(-1.0, 1.0, h, dtype=np.float32),​
+              np.linspace(-1.0, 1.0, w, dtype=np.float32),​
+              indexing="ij"​
+         )​
+         r2 = xx ** 2 + yy ** 2​
+         periphery_mask = r2 > 0.1225​
+         if not np.any(periphery_mask):​
+              return self.cfg.lca_poly_red, self.cfg.lca_poly_blue​
+​
+         grad_gx = cv2.Sobel(img_lin[:, :, 1], cv2.CV_32F, 1, 0,
+ksize=3)​
+         grad_gy = cv2.Sobel(img_lin[:, :, 1], cv2.CV_32F, 0, 1,
+ksize=3)​
+         grad_mag_g = np.hypot(grad_gx, grad_gy)​
+         edge_thresh = np.percentile(grad_mag_g[periphery_mask], 92.0)​
+​
+         if edge_thresh < 1e-3:​
+              return self.cfg.lca_poly_red, self.cfg.lca_poly_blue​
+​
+         best_r_scale = 1.0​
+         best_b_scale = 1.0​
+         min_err_r = float("inf")​
+         min_err_b = float("inf")​
+​
+         roi_mask = periphery_mask & (grad_mag_g >= edge_thresh)​
+         g_norm = grad_mag_g[roi_mask] / (np.mean(grad_mag_g[roi_mask])
++ 1e-6)​
+​
+         for scale_candidate in (0.85, 1.0, 1.15):​
+              r_poly = tuple(c * scale_candidate for c in
+self.cfg.lca_poly_red)​
+              b_poly = tuple(c * scale_candidate for c in
+self.cfg.lca_poly_blue)​
+              warped_r = self._warp_channel_polynomial(img_lin[:, :, 0],
+xx, yy, r2, r_poly)​
+<PARSED TEXT FOR PAGE: 18 / 64>
+            warped_b = self._warp_channel_polynomial(img_lin[:, :, 2],
+xx, yy, r2, b_poly)​
+​
+            gr_mag = np.hypot(​
+                cv2.Sobel(warped_r, cv2.CV_32F, 1, 0, ksize=3),​
+                cv2.Sobel(warped_r, cv2.CV_32F, 0, 1, ksize=3)​
+            )[roi_mask]​
+            gb_mag = np.hypot(​
+                cv2.Sobel(warped_b, cv2.CV_32F, 1, 0, ksize=3),​
+                cv2.Sobel(warped_b, cv2.CV_32F, 0, 1, ksize=3)​
+            )[roi_mask]​
+​
+            err_r = float(np.mean((gr_mag / (np.mean(gr_mag) + 1e-6) -
+g_norm) ** 2))​
+            err_b = float(np.mean((gb_mag / (np.mean(gb_mag) + 1e-6) -
+g_norm) ** 2))​
+            if err_r < min_err_r:​
+                min_err_r = err_r​
+                best_r_scale = scale_candidate​
+            if err_b < min_err_b:​
+                min_err_b = err_b​
+                best_b_scale = scale_candidate​
+​
+        final_r = tuple(c * best_r_scale for c in
+self.cfg.lca_poly_red)​
+        final_b = tuple(c * best_b_scale for c in
+self.cfg.lca_poly_blue)​
+        return final_r, final_b​
+​
+    @staticmethod​
+    def _warp_channel_polynomial(​
+        channel: np.ndarray,​
+        xx: np.ndarray,​
+        yy: np.ndarray,​
+        r2: np.ndarray,​
+        poly_coeffs: Tuple[float, float, float, float]​
+    ) -> np.ndarray:​
+        a2, a4, a6, a8 = poly_coeffs​
+        r4 = r2 * r2​
+        r6 = r4 * r2​
+        r8 = r4 * r4​
+        radial_factor = 1.0 + a2 * r2 + a4 * r4 + a6 * r6 + a8 * r8​
+        h, w = channel.shape​
+        map_x = ((xx * radial_factor + 1.0) * 0.5 * (w -
+1)).astype(np.float32)​
+        map_y = ((yy * radial_factor + 1.0) * 0.5 * (h -
+1)).astype(np.float32)​
+        return cv2.remap(channel, map_x, map_y,
+<PARSED TEXT FOR PAGE: 19 / 64>
+interpolation=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT_101)​
+​
+    def correct_chromatic_aberration_linear(self, img_lin: np.ndarray)
+-> np.ndarray:​
+        """Wyrównuje subpikselowo płaszczyzny R i B względem
+referencyjnego kanału G."""​
+        h, w, _ = img_lin.shape​
+        yy, xx = np.meshgrid(​
+             np.linspace(-1.0, 1.0, h, dtype=np.float32),​
+             np.linspace(-1.0, 1.0, w, dtype=np.float32),​
+             indexing="ij"​
+        )​
+        r2 = xx ** 2 + yy ** 2​
+        poly_r, poly_b = self.estimate_or_get_lca_polynomials(img_lin)​
+        self.logger.info(f"[LCA] Zastosowano wielomian 8. rzędu:
+R={poly_r}, B={poly_b}")​
+​
+        out = np.empty_like(img_lin, dtype=np.float32)​
+        out[:, :, 0] = self._warp_channel_polynomial(img_lin[:, :, 0],
+xx, yy, r2, poly_r)​
+        out[:, :, 1] = img_lin[:, :, 1] # Kanał G jako referencja
+geometryczna​
+        out[:, :, 2] = self._warp_channel_polynomial(img_lin[:, :, 2],
+xx, yy, r2, poly_b)​
+        return np.clip(out, 0.0, 1.0)​
+​
+    def build_anisotropic_psf_tensor(self, kernel_size: int = 15,
+radial_pos: float = 0.5, angle_rad: float = 0.0) -> torch.Tensor:​
+        """​
+        Buduje 3-kanałowy tensor PSF (3, 1, K, K) w float32
+uwzględniający:​
+        - Podłużną aberrację chromatyczną (LoCA: osobne sigma dla R,
+G, B)​
+        - Astygmatyzm saggitalny/tangencjalny rosnący z promieniem
+pola widzenia​
+        """​
+        half = kernel_size // 2​
+        coords = torch.arange(-half, half + 1, dtype=torch.float32,
+device=self.device)​
+        yy, xx = torch.meshgrid(coords, coords, indexing="ij")​
+​
+        cos_t = math.cos(angle_rad)​
+        sin_t = math.sin(angle_rad)​
+        x_rot = cos_t * xx + sin_t * yy​
+        y_rot = -sin_t * xx + cos_t * yy​
+​
+        sigmas_base = [self.cfg.psf_sigma_r, self.cfg.psf_sigma_g,
+self.cfg.psf_sigma_b]​
+<PARSED TEXT FOR PAGE: 20 / 64>
+        kernels = []​
+        for s_base in sigmas_base:​
+             s_rad = s_base * (1.0 + self.cfg.coma_anisotropy *
+(radial_pos ** 2))​
+             s_tan = s_base * (1.0 + 0.12 * (radial_pos ** 2))​
+             psf = torch.exp(-0.5 * ((x_rot ** 2) / (s_rad ** 2 + 1e-6)
++ (y_rot ** 2) / (s_tan ** 2 + 1e-6)))​
+             psf = psf / torch.sum(psf)​
+             kernels.append(psf.unsqueeze(0).unsqueeze(0))​
+​
+        return torch.cat(kernels, dim=0) # shape: (3, 1, K, K)​
+​
+    @staticmethod​
+    def _compute_tv_divergence(x: torch.Tensor, eps: float = 1e-6) ->
+torch.Tensor:​
+        """Oblicza dywergencję znormalizowanego gradientu dla
+regularyzacji Total Variation."""​
+        dx = F.pad(x[:, :, :, 1:] - x[:, :, :, :-1], (0, 1, 0, 0))​
+        dy = F.pad(x[:, :, 1:, :] - x[:, :, :-1, :], (0, 0, 0, 1))​
+        norm = torch.sqrt(dx * dx + dy * dy + eps * eps)​
+        nx = dx / norm​
+        ny = dy / norm​
+        div_x = nx - F.pad(nx[:, :, :, :-1], (1, 0, 0, 0))​
+        div_y = ny - F.pad(ny[:, :, :-1, :], (0, 0, 1, 0))​
+        return div_x + div_y​
+​
+    def deconvolve_richardson_lucy_tv(​
+        self,​
+        img_lin: np.ndarray,​
+        dof_mask: np.ndarray,​
+        tile_size: int = 1024,​
+        overlap: int = 128​
+    ) -> np.ndarray:​
+        """​
+        Wykonuje kafelkową 32-bitową dekonwolucję Richardsona-Lucy'ego
+z regularyzacją TV​
+        oraz ochroną obszarów nieostrych (bokeh) za pomocą maski głębi
+ostrości.​
+        """​
+        h, w, c = img_lin.shape​
+        k_size = 15​
+        pad = k_size // 2​
+        out_img = np.zeros_like(img_lin, dtype=np.float32)​
+        weight_acc = np.zeros((h, w, 1), dtype=np.float32)​
+​
+        stride = max(1, tile_size - overlap)​
+        y_starts = list(range(0, max(1, h - tile_size + 1), stride))​
+        if not y_starts or y_starts[-1] + tile_size < h:​
+<PARSED TEXT FOR PAGE: 21 / 64>
+             y_starts.append(max(0, h - tile_size))​
+         x_starts = list(range(0, max(1, w - tile_size + 1), stride))​
+         if not x_starts or x_starts[-1] + tile_size < w:​
+             x_starts.append(max(0, w - tile_size))​
+​
+         y_starts = sorted(set(y_starts))​
+         x_starts = sorted(set(x_starts))​
+​
+         with torch.no_grad():​
+             for y0 in y_starts:​
+                 y1 = min(h, y0 + tile_size)​
+                 for x0 in x_starts:​
+                     x1 = min(w, x0 + tile_size)​
+                     th, tw = y1 - y0, x1 - x0​
+​
+                     cy = ((y0 + y1) * 0.5 - h * 0.5) / (h * 0.5 +
+1e-6)​
+                     cx = ((x0 + x1) * 0.5 - w * 0.5) / (w * 0.5 +
+1e-6)​
+                     radial_pos = min(1.0, math.hypot(cx, cy))​
+                     angle_rad = math.atan2(cy, cx)​
+​
+                    psf = self.build_anisotropic_psf_tensor(k_size,
+radial_pos, angle_rad)​
+                    psf_adj = torch.flip(psf, dims=[2, 3])​
+​
+                    tile_np = img_lin[y0:y1, x0:x1, :]​
+                    y_obs = torch.from_numpy(tile_np).permute(2, 0,
+1).unsqueeze(0).to(self.device, dtype=torch.float32)​
+                    x_est = y_obs.clone().clamp(min=1e-5)​
+​
+                    # Czynnik czułości brzegowej s = A^T * 1 dla
+nieokresowych warunków brzegowych​
+                    ones = torch.ones_like(y_obs)​
+                    ones_padded = F.pad(ones, (pad, pad, pad, pad),
+mode="reflect")​
+                    sensitivity = F.conv2d(ones_padded, psf_adj,
+groups=3).clamp(min=1e-4)​
+​
+                    for _ in range(self.cfg.rl_iterations):​
+                        x_padded = F.pad(x_est, (pad, pad, pad, pad),
+mode="reflect")​
+                        conv_fwd = F.conv2d(x_padded, psf, groups=3) +
+self.cfg.noise_floor_b​
+                        ratio = y_obs / conv_fwd.clamp(min=1e-6)​
+                        ratio_padded = F.pad(ratio, (pad, pad, pad,
+pad), mode="reflect")​
+                        correction = F.conv2d(ratio_padded, psf_adj,
+<PARSED TEXT FOR PAGE: 22 / 64>
+groups=3)​
+​
+                         if self.cfg.rl_tv_weight > 0.0:​
+                             tv_div =
+self._compute_tv_divergence(x_est)​
+                             denom = (sensitivity -
+self.cfg.rl_tv_weight * tv_div).clamp(min=0.25)​
+                         else:​
+                             denom = sensitivity​
+​
+                         x_est = (x_est / denom) * correction​
+                         x_est = x_est.clamp(0.0, 1.5)​
+​
+                     deconv_tile = x_est.squeeze(0).permute(1, 2,
+0).cpu().numpy()​
+                     mask_tile = dof_mask[y0:y1, x0:x1, np.newaxis]​
+​
+                     # Ochrona bokeh: tylko obszary w głębi ostrości
+otrzymują wyostrzony sygnał RL​
+                     blended_tile = mask_tile * np.clip(deconv_tile,
+0.0, 1.0) + (1.0 - mask_tile) * tile_np​
+​
+                     win_y = np.hanning(th).astype(np.float32) if th >
+16 else np.ones(th, dtype=np.float32)​
+                     win_x = np.hanning(tw).astype(np.float32) if tw >
+16 else np.ones(tw, dtype=np.float32)​
+                     win_2d = np.maximum(np.outer(win_y, win_x),
+1e-3)[:, :, np.newaxis]​
+​
+                     out_img[y0:y1, x0:x1, :] += blended_tile * win_2d​
+                     weight_acc[y0:y1, x0:x1, :] += win_2d​
+​
+         return np.clip(out_img / np.maximum(weight_acc, 1e-6), 0.0,
+1.0)​
+​
+​
+class DepthBokehMaskGenerator:​
+    """​
+    Generuje ciągłą maskę głębi ostrości M_DoF(u,v) w zakresie [0,1]
+chroniącą bokeh​
+    przed wyostrzeniem dekonwolucyjnym oraz halucynacją szumu w
+modelach SR.​
+    """​
+​
+    def __init__(​
+         self,​
+         depth_onnx_path: Optional[Path],​
+         depth_thresh: float,​
+<PARSED TEXT FOR PAGE: 23 / 64>
+        sharpness_thresh: float,​
+        logger: logging.Logger​
+    ) -> None:​
+        self.depth_thresh = depth_thresh​
+        self.sharpness_thresh = sharpness_thresh​
+        self.logger = logger​
+        self.session: Optional[ort.InferenceSession] = None​
+​
+        if HAS_ONNX and depth_onnx_path is not None and
+depth_onnx_path.exists():​
+            providers = ["CUDAExecutionProvider",
+"CPUExecutionProvider"]​
+            self.session = ort.InferenceSession(str(depth_onnx_path),
+providers=providers)​
+            self.logger.info(f"[DepthMask] Załadowano model ONNX głębi
+ostrości: {depth_onnx_path.name}")​
+​
+    def compute_dof_mask(self, img_lin: np.ndarray) -> np.ndarray:​
+        h, w, _ = img_lin.shape​
+        luma = (0.2126 * img_lin[:, :, 0] + 0.7152 * img_lin[:, :, 1]
++ 0.0722 * img_lin[:, :, 2]).astype(np.float32)​
+​
+        lap = np.abs(cv2.Laplacian(luma, cv2.CV_32F, ksize=3))​
+        local_energy = cv2.GaussianBlur(lap, (15, 15), 3.0)​
+        local_mean = cv2.GaussianBlur(luma, (15, 15), 3.0)​
+        local_sq_mean = cv2.GaussianBlur(luma * luma, (15, 15), 3.0)​
+        local_std = np.sqrt(np.maximum(local_sq_mean - local_mean *
+local_mean, 1e-6))​
+​
+        freq_ratio = local_energy / (local_std + 0.015)​
+        freq_norm = freq_ratio / (np.percentile(freq_ratio, 98.0) +
+1e-6)​
+        sharpness_prob = 1.0 / (1.0 + np.exp(-12.0 * (freq_norm -
+self.sharpness_thresh)))​
+​
+        if self.session is not None:​
+            inp_resized = cv2.resize(img_lin, (518, 518),
+interpolation=cv2.INTER_AREA)​
+            blob = inp_resized.transpose(2, 0, 1)[np.newaxis,
+...].astype(np.float32)​
+            inp_name = self.session.get_inputs()[0].name​
+            pred = self.session.run(None, {inp_name: blob})[0]​
+            depth_map = np.squeeze(pred).astype(np.float32)​
+            depth_map = (depth_map - depth_map.min()) /
+(depth_map.max() - depth_map.min() + 1e-6)​
+            depth_map = cv2.resize(depth_map, (w, h),
+interpolation=cv2.INTER_CUBIC)​
+            depth_prob = 1.0 / (1.0 + np.exp(-10.0 * (depth_map -
+<PARSED TEXT FOR PAGE: 24 / 64>
+self.depth_thresh)))​
+             combined = 0.55 * sharpness_prob + 0.45 * depth_prob​
+         else:​
+             combined = sharpness_prob​
+​
+         smooth_mask = self._guided_filter_gray(luma,
+combined.astype(np.float32), radius=16, eps=1e-3)​
+         return np.clip(smooth_mask, 0.0, 1.0)​
+​
+    @staticmethod​
+    def _guided_filter_gray(guide: np.ndarray, src: np.ndarray,
+radius: int, eps: float) -> np.ndarray:​
+         ksize = (2 * radius + 1, 2 * radius + 1)​
+         mean_i = cv2.boxFilter(guide, cv2.CV_32F, ksize)​
+         mean_p = cv2.boxFilter(src, cv2.CV_32F, ksize)​
+         mean_ip = cv2.boxFilter(guide * src, cv2.CV_32F, ksize)​
+         cov_ip = mean_ip - mean_i * mean_p​
+         mean_ii = cv2.boxFilter(guide * guide, cv2.CV_32F, ksize)​
+         var_i = mean_ii - mean_i * mean_i​
+         a = cov_ip / (var_i + eps)​
+         b = mean_p - a * mean_i​
+         mean_a = cv2.boxFilter(a, cv2.CV_32F, ksize)​
+         mean_b = cv2.boxFilter(b, cv2.CV_32F, ksize)​
+         return mean_a * guide + mean_b​
+​
+​
+class GaussianSeamlessTiler:​
+    """​
+    Generator współrzędnych kafelków oraz dwuwymiarowych okien
+wagowych Gaussa​
+    zapewniających ciągłość C^infinity oraz dokładny rozkład jedności
+na zakładkach.​
+    """​
+​
+    def __init__(self, tile_size: int, overlap: int) -> None:​
+         if overlap >= tile_size:​
+             raise ValueError("Zakładka (overlap) musi być mniejsza niż
+rozmiar kafelka (tile_size).")​
+         self.tile_size = tile_size​
+         self.overlap = overlap​
+         self.stride = tile_size - overlap​
+         self._base_window = self._build_gaussian_window(tile_size,
+tile_size)​
+​
+    @staticmethod​
+    def _build_gaussian_window(height: int, width: int) -> np.ndarray:​
+         sigma_y = 0.25 * height​
+         sigma_x = 0.25 * width​
+<PARSED TEXT FOR PAGE: 25 / 64>
+        y = np.arange(height, dtype=np.float32) - (height - 1) * 0.5​
+        x = np.arange(width, dtype=np.float32) - (width - 1) * 0.5​
+        wy = np.exp(-0.5 * (y * y) / max(sigma_y * sigma_y, 1e-6))​
+        wx = np.exp(-0.5 * (x * x) / max(sigma_x * sigma_x, 1e-6))​
+        win = np.outer(wy, wx).astype(np.float32)​
+        return np.maximum(win, 1e-4)[:, :, np.newaxis]​
+​
+    def get_window(self, height: int, width: int) -> np.ndarray:​
+        if height == self.tile_size and width == self.tile_size:​
+            return self._base_window​
+        return self._build_gaussian_window(height, width)​
+​
+    def generate_grid(self, full_height: int, full_width: int) ->
+List[TileCoordinate]:​
+         y_coords = list(range(0, max(1, full_height - self.tile_size +
+1), self.stride))​
+         if not y_coords or y_coords[-1] + self.tile_size <
+full_height:​
+             y_coords.append(max(0, full_height - self.tile_size))​
+​
+         x_coords = list(range(0, max(1, full_width - self.tile_size +
+1), self.stride))​
+         if not x_coords or x_coords[-1] + self.tile_size < full_width:​
+             x_coords.append(max(0, full_width - self.tile_size))​
+​
+         y_coords = sorted(set(y_coords))​
+         x_coords = sorted(set(x_coords))​
+​
+         return [​
+             TileCoordinate(y0=y, y1=min(full_height, y +
+self.tile_size), x0=x, x1=min(full_width, x + self.tile_size))​
+             for y in y_coords​
+             for x in x_coords​
+         ]​
+​
+​
+class ResNetSRTileEngine(SuperResolutionPort):​
+    """​
+    Silnik nadrozdzielczości kafelkowej obsługujący modele ONNX /
+TorchScript (Real-ESRGAN / HAT / SwinIR)​
+    oraz deterministyczną architekturę rezydualną PyTorch w trybie
+FP16/FP32.​
+    """​
+​
+    def __init__(self, model_path: Optional[Path], device: str,
+use_fp16: bool, logger: logging.Logger) -> None:​
+         self.device = torch.device(device)​
+         self.use_fp16 = use_fp16 and (self.device.type == "cuda")​
+<PARSED TEXT FOR PAGE: 26 / 64>
+        self.logger = logger​
+        self.onnx_session: Optional[ort.InferenceSession] = None​
+        self.torch_model: Optional[nn.Module] = None​
+​
+        if model_path is not None and model_path.exists():​
+            if model_path.suffix.lower() == ".onnx" and HAS_ONNX:​
+                providers = ["CUDAExecutionProvider",
+"CPUExecutionProvider"]​
+                self.onnx_session =
+ort.InferenceSession(str(model_path), providers=providers)​
+                self.logger.info(f"[SR Engine] Załadowano model ONNX:
+{model_path.name}")​
+            else:​
+                self.torch_model = torch.jit.load(str(model_path),
+map_location=self.device)​
+                self.torch_model.eval()​
+                if self.use_fp16:​
+                     self.torch_model.half()​
+                self.logger.info(f"[SR Engine] Załadowano model
+TorchScript: {model_path.name}")​
+        else:​
+            self.logger.info("[SR Engine] Użycie wbudowanego
+rezydualnego operatora mikro-detalu PyTorch.")​
+​
+    def enhance_tile(self, tile_rgb_norm: np.ndarray) -> np.ndarray:​
+        if self.onnx_session is not None:​
+            blob = tile_rgb_norm.transpose(2, 0, 1)[np.newaxis,
+...].astype(np.float32)​
+            inp_name = self.onnx_session.get_inputs()[0].name​
+            out = self.onnx_session.run(None, {inp_name: blob})[0]​
+            res = np.squeeze(out, axis=0).transpose(1, 2, 0)​
+            if res.shape[:2] != tile_rgb_norm.shape[:2]:​
+                res = cv2.resize(res, (tile_rgb_norm.shape[1],
+tile_rgb_norm.shape[0]), interpolation=cv2.INTER_CUBIC)​
+            return np.clip(res, 0.0, 1.0).astype(np.float32)​
+​
+        with torch.no_grad():​
+            tensor = torch.from_numpy(tile_rgb_norm).permute(2, 0,
+1).unsqueeze(0).to(self.device)​
+            if self.use_fp16:​
+                tensor = tensor.half()​
+​
+            if self.torch_model is not None:​
+                pred = self.torch_model(tensor)​
+                if pred.shape[-2:] != tensor.shape[-2:]:​
+                     pred = F.interpolate(pred, size=tensor.shape[-2:],
+mode="bicubic", align_corners=False)​
+                return pred.float().clamp(0.0,
+<PARSED TEXT FOR PAGE: 27 / 64>
+1.0).squeeze(0).permute(1, 2, 0).cpu().numpy()​
+​
+             t_f32 = tensor.float()​
+             blur_fine = F.avg_pool2d(F.pad(t_f32, (1, 1, 1, 1),
+mode="reflect"), kernel_size=3, stride=1)​
+             blur_med = F.avg_pool2d(F.pad(t_f32, (2, 2, 2, 2),
+mode="reflect"), kernel_size=5, stride=1)​
+             detail_fine = t_f32 - blur_fine​
+             detail_med = blur_fine - blur_med​
+             edge_limiter = torch.tanh(detail_fine * 6.0) * 0.18 +
+detail_med * 0.25​
+             enhanced = (t_f32 + edge_limiter).clamp(0.0, 1.0)​
+             return enhanced.squeeze(0).permute(1, 2, 0).cpu().numpy()​
+​
+​
+class InsightFaceArcFaceONNX(FaceAnalysisPort):​
+    """​
+    Moduł ekstrakcji 512-wymiarowych wektorów tożsamości InsightFace
+(ArcFace R100) w ONNX Runtime​
+    oraz wyrównania afinicznego Umeyamy (5-point similarity
+alignment).​
+    """​
+​
+    ARCFACE_SRC_112 = np.array([​
+         [38.2946, 51.6963],​
+         [73.5318, 51.5014],​
+         [56.0252, 71.7366],​
+         [41.5493, 92.3655],​
+         [70.7299, 92.2041]​
+    ], dtype=np.float32)​
+​
+    def __init__(​
+         self,​
+         arcface_onnx_path: Optional[Path],​
+         detector_onnx_path: Optional[Path],​
+         logger: logging.Logger​
+    ) -> None:​
+         self.logger = logger​
+         self.arcface_sess: Optional[ort.InferenceSession] = None​
+​
+         if HAS_ONNX and arcface_onnx_path is not None and
+arcface_onnx_path.exists():​
+             providers = ["CUDAExecutionProvider",
+"CPUExecutionProvider"]​
+             self.arcface_sess =
+ort.InferenceSession(str(arcface_onnx_path), providers=providers)​
+             self.logger.info(f"[IdentityGuard] Załadowano model ONNX
+ArcFace R100: {arcface_onnx_path.name}")​
+<PARSED TEXT FOR PAGE: 28 / 64>
+​
+        self.haar_cascade =
+cv2.CascadeClassifier(cv2.data.haarcascades +
+"haarcascade_frontalface_default.xml")​
+​
+    @staticmethod​
+    def umeyama_similarity_transform(src_pts: np.ndarray, dst_pts:
+np.ndarray) -> np.ndarray:​
+        """​
+        Wyznacza dokładną macierz transformacji podobieństwa 2x3
+metodą Umeyamy (1991)​
+        minimalizującą błąd średniokwadratowy pomiędzy zestawami
+punktów kluczowych.​
+        """​
+        num = src_pts.shape[0]​
+        dim = src_pts.shape[1]​
+        src_mean = src_pts.mean(axis=0)​
+        dst_mean = dst_pts.mean(axis=0)​
+        src_demean = src_pts - src_mean​
+        dst_demean = dst_pts - dst_mean​
+​
+        A = dst_demean.T @ src_demean / num​
+        d = np.ones((dim,), dtype=np.float64)​
+        if np.linalg.det(A) < 0:​
+             d[dim - 1] = -1​
+​
+        T = np.eye(dim + 1, dtype=np.float64)​
+        U, S, Vt = np.linalg.svd(A)​
+        rank = np.linalg.matrix_rank(A)​
+        if rank == 0:​
+             return np.eye(2, 3, dtype=np.float32)​
+        elif rank == dim - 1:​
+             if np.linalg.det(U) * np.linalg.det(Vt) > 0:​
+                 T[:dim, :dim] = U @ Vt​
+             else:​
+                 s = d[dim - 1]​
+                 d[dim - 1] = -1​
+                 T[:dim, :dim] = U @ np.diag(d) @ Vt​
+                 d[dim - 1] = s​
+        else:​
+             T[:dim, :dim] = U @ np.diag(d) @ Vt​
+​
+        var_src = np.var(src_demean, axis=0).sum()​
+        scale = 1.0 / max(var_src, 1e-8) * (S @ d)​
+        T[:dim, dim] = dst_mean - scale * (T[:dim, :dim] @ src_mean.T)​
+        T[:dim, :dim] *= scale​
+        return T[:2, :].astype(np.float32)​
+​
+<PARSED TEXT FOR PAGE: 29 / 64>
+    def extract_embedding_aligned(self, aligned_face_112: np.ndarray)
+-> np.ndarray:​
+        """​
+        Oblicza 512-wymiarowy znormalizowany L2 wektor tożsamości
+twarzy z wycinka 112x112 RGB [0,1].​
+        """​
+        if self.arcface_sess is not None:​
+             blob = ((aligned_face_112 * 255.0 - 127.5) /
+127.5).transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)​
+             inp_name = self.arcface_sess.get_inputs()[0].name​
+             feat = self.arcface_sess.run(None, {inp_name: blob})[0]​
+             vec = feat.flatten().astype(np.float32)​
+             norm = float(np.linalg.norm(vec))​
+             return vec / max(norm, 1e-8)​
+​
+        gray = cv2.cvtColor((aligned_face_112 *
+255.0).astype(np.uint8), cv2.COLOR_RGB2GRAY).astype(np.float32) /
+255.0​
+        dct_block = cv2.dct(cv2.resize(gray, (32, 32),
+interpolation=cv2.INTER_AREA))​
+        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)​
+        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)​
+        g_pooled = cv2.resize(np.hypot(gx, gy), (16, 16),
+interpolation=cv2.INTER_AREA).flatten()​
+        vec = np.concatenate([dct_block[:16, :16].flatten(),
+g_pooled])​
+        norm = float(np.linalg.norm(vec))​
+        return (vec / max(norm, 1e-8)).astype(np.float32)​
+​
+    def detect_and_extract(self, img_rgb_norm: np.ndarray) ->
+List[FaceIdentityRecord]:​
+        h, w, _ = img_rgb_norm.shape​
+        gray_u8 = cv2.cvtColor((np.clip(img_rgb_norm, 0.0, 1.0) *
+255.0).astype(np.uint8), cv2.COLOR_RGB2GRAY)​
+        bboxes = self.haar_cascade.detectMultiScale(gray_u8,
+scaleFactor=1.1, minNeighbors=5, minSize=(64, 64))​
+​
+        records: List[FaceIdentityRecord] = []​
+        for idx, (x, y, bw, bh) in enumerate(bboxes):​
+             x1, y1, x2, y2 = float(x) / w, float(y) / h, float(x + bw)
+/ w, float(y + bh) / h​
+             landmarks_px = np.array([​
+                 [x + 0.34 * bw, y + 0.42 * bh],​
+                 [x + 0.66 * bw, y + 0.42 * bh],​
+                 [x + 0.50 * bw, y + 0.60 * bh],​
+                 [x + 0.37 * bw, y + 0.78 * bh],​
+                 [x + 0.63 * bw, y + 0.78 * bh]​
+             ], dtype=np.float32)​
+<PARSED TEXT FOR PAGE: 30 / 64>
+​
+             M_112 = self.umeyama_similarity_transform(landmarks_px,
+self.ARCFACE_SRC_112)​
+             aligned_112 = cv2.warpAffine(img_rgb_norm, M_112, (112,
+112), flags=cv2.INTER_CUBIC)​
+             emb = self.extract_embedding_aligned(np.clip(aligned_112,
+0.0, 1.0))​
+​
+             landmarks_norm = landmarks_px / np.array([[w, h]],
+dtype=np.float32)​
+             records.append(​
+                 FaceIdentityRecord(​
+                     face_id=idx,​
+                     bbox_norm=(x1, y1, x2, y2),​
+                     landmarks_norm=landmarks_norm,​
+                     embedding_512d=emb​
+                 )​
+             )​
+         return records​
+​
+​
+class CodeFormerControlNetInpainter(FaceRestorationPort):​
+    """​
+    Moduł rekonstrukcji i inpaintingu twarzy w rozdzielczości 512x512
+obsługujący​
+    model ONNX CodeFormer z dynamiczną wagą wierności w in [0, 1] oraz
+maskowaniem inpaintingu.​
+    """​
+​
+    def __init__(self, codeformer_onnx_path: Optional[Path], logger:
+logging.Logger) -> None:​
+         self.logger = logger​
+         self.session: Optional[ort.InferenceSession] = None​
+         if HAS_ONNX and codeformer_onnx_path is not None and
+codeformer_onnx_path.exists():​
+             providers = ["CUDAExecutionProvider",
+"CPUExecutionProvider"]​
+             self.session =
+ort.InferenceSession(str(codeformer_onnx_path), providers=providers)​
+             self.logger.info(f"[FaceRestore] Załadowano model ONNX
+CodeFormer: {codeformer_onnx_path.name}")​
+​
+    def restore_aligned_face(​
+         self,​
+         aligned_face_512: np.ndarray,​
+         inpaint_mask_512: np.ndarray,​
+         fidelity_weight: float​
+    ) -> np.ndarray:​
+<PARSED TEXT FOR PAGE: 31 / 64>
+         if self.session is not None:​
+             img_norm = ((aligned_face_512 - 0.5) / 0.5).transpose(2,
+0, 1)[np.newaxis, ...].astype(np.float32)​
+             inputs = {}​
+             for inp in self.session.get_inputs():​
+                 if len(inp.shape) == 4:​
+                     inputs[inp.name] = img_norm​
+                 else:​
+                     dtype = np.float64 if "double" in inp.type else
+np.float32​
+                     inputs[inp.name] = np.array([fidelity_weight],
+dtype=dtype)​
+             out = self.session.run(None, inputs)[0]​
+             restored = np.squeeze(out, axis=0).transpose(1, 2, 0)​
+             restored = np.clip((restored * 0.5) + 0.5, 0.0,
+1.0).astype(np.float32)​
+         else:​
+             low = cv2.GaussianBlur(aligned_face_512, (0, 0), 4.0)​
+             mid = cv2.GaussianBlur(aligned_face_512, (0, 0), 1.4)​
+             high_skin = aligned_face_512 - mid​
+             mid_struct = mid - low​
+             gain = 1.0 + (1.0 - fidelity_weight) * 0.85​
+             restored = np.clip(low + mid_struct * gain + high_skin *
+(1.15 + 0.3 * (1.0 - fidelity_weight)), 0.0, 1.0)​
+​
+         mask_3c = inpaint_mask_512[:, :, np.newaxis]​
+         return (mask_3c * restored + (1.0 - mask_3c) *
+aligned_face_512).astype(np.float32)​
+​
+​
+class BigTIFFStreamWriter:​
+    """​
+    Zapisuje wielkogabarytową macierz 400 MP z dyskowego pliku
+numpy.memmap do 16-bitowego​
+    kontenera BigTIFF (wersja 43) w trybie kafelkowym bez ładowania
+całości do pamięci RAM.​
+    """​
+​
+    def __init__(self, tile_size: int = 512, logger:
+Optional[logging.Logger] = None) -> None:​
+         self.tile_size = (tile_size, tile_size)​
+         self.logger = logger or logging.getLogger(__name__)​
+​
+    @staticmethod​
+    def _tile_generator(​
+         mmap_path: Path,​
+         shape: Tuple[int, int, int],​
+         tile_h: int,​
+<PARSED TEXT FOR PAGE: 32 / 64>
+        tile_w: int​
+    ) -> Generator[np.ndarray, None, None]:​
+        """​
+        Generator kafelków otwierający świeży deskryptor dla każdego
+wiersza kafelków,​
+        co eliminuje błąd kumulacji pamięci podręcznej numpy.memmap.​
+        """​
+        h, w, c = shape​
+        for y in range(0, h, tile_h):​
+             row_mmap = np.memmap(mmap_path, dtype=np.uint16, mode="r",
+shape=shape)​
+             y_end = min(y + tile_h, h)​
+             for x in range(0, w, tile_w):​
+                 x_end = min(x + tile_w, w)​
+                 tile = np.array(row_mmap[y:y_end, x:x_end, :],
+dtype=np.uint16, copy=True)​
+                 yield tile​
+             del row_mmap​
+             gc.collect()​
+​
+    def write_16bit_bigtiff(self, mmap_path: Path, shape: Tuple[int,
+int, int], output_path: Path) -> None:​
+        th, tw = self.tile_size​
+        self.logger.info(​
+             f"[BigTIFF] Strumieniowy zapis 16-bit BigTIFF do
+'{output_path}' "​
+             f"(wymiary={shape[1]}x{shape[0]}, kafelek={tw}x{th})"​
+        )​
+        tiles_iter = self._tile_generator(mmap_path, shape, th, tw)​
+        with tifffile.TiffWriter(str(output_path), bigtiff=True,
+imagej=False, ome=False) as tif:​
+             tif.write(​
+                 tiles_iter,​
+                 shape=shape,​
+                 dtype=np.uint16,​
+                 tile=(th, tw),​
+                 photometric="rgb",​
+                 compression="adobe_deflate",​
+                 resolution=(300.0, 300.0),​
+                 resolutionunit="INCH",​
+                 software="S24Ultra-400MP-Reconstruction-Engine"​
+             )​
+​
+​
+#
+======================================================================
+========​
+# 3. WARSTWA APLIKACJI (APPLICATION LAYER: 12-STAGE ORCHESTRATOR)​

@@ -1,0 +1,759 @@
+AETHER / ARGON SOURCE TEXT MIRROR
+Source: Potok Rekonstrukcji Obrazu 400 MP.PDF (64 pages)
+Original file SHA256: d5f955b871a66196229d75c911fe4dd02def4211e7e77d908ec955c820b48afc
+Pages: 1-16. PDF text extraction only; charts, columns, mathematical notation and embedded code may be malformed. NOT EXECUTABLE SOURCE.
+
+<PARSED TEXT FOR PAGE: 1 / 64>
+Architektura Wielkoskalowej
+Rekonstrukcji Obrazu 400 MP: Od
+Fizycznej Dekonwolucji Optycznej po
+Bezszwowe Przetwarzanie Out-of-Core
+na Platformie Samsung Galaxy S24 Ultra
+Profil Sprzętowy Samsung Galaxy S24 Ultra i Analiza
+Budżetu Pamięciowego dla Obrazów 400 MP
+Realizacja procesu rekonstrukcji fotograficznej do rozdzielczości 400 megapikseli (20000 \times
+20000 pikseli w proporcji 1:1 lub 23094 \times 17320 pikseli w formacie 4:3) na urządzeniu
+mobilnym wymaga ścisłego podporządkowania architektury oprogramowania fizycznym
+ograniczeniom podsystemu pamięciowego. Platforma docelowa, Samsung Galaxy S24 Ultra,
+bazuje na układzie scalonym Qualcomm Snapdragon 8 Gen 3 for Galaxy (SM8650-AC),
+wytwarzanym w procesie litograficznym 4 nm TSMC. Architektura procesora centralnego (CPU)
+obejmuje 8 rdzeni Kryo skonfigurowanych w czterech klastrach: jeden rdzeń główny ARM
+Cortex-X4 taktowany zegarem do 3,39–3,40 GHz, trzy rdzenie wydajnościowe Cortex-A720 o
+taktowaniu 3,10–3,15 GHz, dwa rdzenie Cortex-A720 taktowane zegarem 2,90–2,96 GHz oraz
+dwa rdzenie energooszczędne Cortex-A520 pracujące z częstotliwością 2,20–2,27 GHz,
+wspierane przez 12 MB współdzielonej pamięci podręcznej L3. Za obliczenia równoległe
+odpowiadają procesor graficzny Qualcomm Adreno 750 taktowany zegarem 1000 MHz oraz
+wyspecjalizowany akcelerator neuronowy Qualcomm Hexagon NPU wraz z procesorem obrazu
+Snapdragon Cognitive ISP. W testach syntetycznych AnTuTu v10 układ ten osiąga łączny wynik
+do 2 341 394 punktów, z czego 717 970 punktów przypada na podsystem CPU, 790 073 na
+układ GPU, 341 284 na podsystem pamięci, a 492 067 na warstwę UX.
+Kluczowym wąskim gardłem w zadaniach wielkoskalowej obróbki obrazu (Ultra-High-Resolution
+Computational Photography) nie jest jednak surowa moc obliczeniowa jednostek ALU, lecz
+pojemność i architektura zunifikowanej pamięci operacyjnej. Wszystkie główne warianty
+handlowe Samsunga Galaxy S24 Ultra (wyposażone w 256 GB, 512 GB lub 1024 GB szybkiej
+pamięci masowej UFS 4.0 bez gniazda kart microSD) dysponują 12 GB czterokanałowej
+pamięci LPDDR5X o taktowaniu 4200–4266 MHz. W architekturze SoC (System-on-Chip)
+pamięć ta jest współdzielona pomiędzy system operacyjny Android 14 z nakładką One UI
+(zajmujący na dysku około 28 GB i rezerwujący w czasie rzeczywistym od 4,2 GB do 5,5 GB
+RAM na usługi systemowe, kompozytor ekranu 1440 \times 3120 LTPO AMOLED 2X oraz
+bufory podsystemu kamery 200 MP), procesor CPU, układ graficzny Adreno 750 oraz
+akcelerator Hexagon NPU. W konsekwencji bezpieczny budżet pamięci dynamicznej (Heap
+oraz alokacje natywne DMA) dostępny dla pojedynczego procesu obliczeniowego w przestrzeni
+użytkownika wynosi zaledwie 5,5–6,5 GB. Przekroczenie tego progu aktywuje mechanizm
+Android Low Memory Killer (LMK) lub powoduje natychmiastowe przerwanie wykonania z
+błędem Out Of Memory (OOM) na poziomie sterownika pamięci wirtualnej.
+<PARSED TEXT FOR PAGE: 2 / 64>
+Analiza zapotrzebowania pamięciowego dla macierzy 400 MP (20000 \times 20000 \times 3
+kanały RGB = 1,2 \times 10^9 skalarów) wyjaśnia przyczyny awarii standardowych potoków
+przetwarzania w pamięci RAM (in-memory). Jak potwierdzają profile pamięciowe biblioteki
+tifffile, pojedyncza tablica NumPy o wymiarach 20000 \times 20000 \times 3 zapisana w
+najprostszym typie uint8 zajmuje na dysku i w pamięci około 1,15\text{ GiB} (1,2\text{ GB}).
+Przejście na format 16-bitowy (uint16), niezbędny przy zapisie finalnego obrazu o wysokiej głębi
+radiometrycznej, podwaja ten rozmiar do 2,40\text{ GB} (2,235\text{ GiB}). Z kolei etap fizycznej
+dekonwolucji optycznej Richardsona-Lucy'ego oraz korekcji aberracji chromatycznej wymaga
+reprezentacji liniowej float32, w której pojedyncza macierz obrazu zajmuje 4,80\text{ GB}
+(4,47\text{ GiB}). Utrzymywanie w pamięci operacyjnej jednocześnie tensora wejściowego,
+bufora wag Gaussa oraz macierzy wyjściowej przekracza fizyczną pojemność kości LPDDR5X.
+Etap             Wymiary       Typ danych Rozmiar         Liczba         Łączne     Status na
+przetwarzani macierzy (H                    pojedynczeg wymaganych zapotrzebow Samsung
+a / Struktura \times W                      o bufora      buforów        anie       S24 Ultra (12
+danych           \times C)                                równoległych (In-Memory) GB RAM)
+Obraz            8120 \times uint16         301,09\text{ 1 (Wejście) 301,09\text{ Bezpieczny
+wejściowy        6180 \times 3              MB}                          MB}        w RAM
+RAW /
+ProRAW (50
+MP)
+Dekonwolucj 8120 \times float32             602,18\text{ 4 (x^{(k)}, y, 2,41\text{  Wymaga
+a RL +           6180 \times 3              MB}           \text{est},    GB}        zwalniania
+korekcja LCA                                              \text{grad})              buforów
+(50 MP)                                                                             pośrednich
+Macierz          20000 \times uint8         1,20\text{    2 (Wejście + 2,40\text{   Granica
+docelowa         20000 \times               GB}           Wyjście)       GB}        stabilności
+400 MP           3                          (1,15\text{                             przy
+(8-bit)                                     GiB})                                   modelach AI
+Macierz          20000         uint16       2,40\text{    3              7,20\text{ Krytyczny
+docelowa         \t[span_22](s              GB}           (I_{\text{base GB}        błąd Out Of
+400 MP           tart_span)[sp              (2,24\text{   }}, f_L, f_H)             Memory
+(16-bit)         an_22](end_                GiB})                                   (OOM)
+                 span)imes
+                 20000 \times
+                 3
+Macierz          20000 \times float32       4,80\text{    3 (Obraz + 14,40\text{ Natychmiast
+docelowa         20000 \times               GB}           Wagi Gaussa GB}           owa
+400 MP           3                          (4,47\text{   + Wyjście)                terminacja
+(32-bit                                     GiB})                                   przez LMK
+Linear)
+Drugą barierą architektoniczną jest specyfikacja klasycznego standardu TIFF 6.0. Tradycyjny
+format TIFF wykorzystuje 32-bitowe wskaźniki przesunięcia (offsets), co narzuca twardy limit
+rozmiaru pliku wynoszący 4\text{ GB} (biblioteka tifffile domyślnie wymusza przejście na
+rozszerzony format powyżej progu bigsize, równego 4\text{ GB} pomniejszone o 32\text{ MB}
+zarezerwowane na metadane). Zapis nieskompresowanego lub bezstratnie skompresowanego
+obrazu 400 MP z kanałami 16-bitowymi wymaga zastosowania specyfikacji BigTIFF
+(identyfikowanej w nagłówku wersją 43), która zastępuje struktury IFD oraz znaczniki
+<PARSED TEXT FOR PAGE: 3 / 64>
+64-bitowymi offsetami.
+Co więcej, szczegółowa analiza zachowania jądra systemu operacyjnego podczas zapisu
+wielkogabarytowych tablic numpy.memmap do pliku BigTIFF za pomocą generatora kafelków
+(tifffile.TiffWriter.write) ujawnia krytyczny problem kumulacji pamięci podręcznej stron (page
+cache). Jeśli generator kafelków odczytuje wycinki z pojedynczej, długowiecznej instancji
+numpy.memmap, podsystem wirtualnej pamięci systemu utrzymuje zmapowane strony w
+pamięci fizycznej RAM, prowadząc do liniowego wzrostu zużycia pamięci aż do wystąpienia
+błędu OOM. Rozwiązaniem tego problemu w architekturze produkcyjnej jest strumieniowe
+otwieranie krótkotrwałych deskryptorów tablicy mapowanej dla każdego kolejnego pasa
+kafelków, w połączeniu z zapisem kafelkowym tile=(tile_h, tile_w) bezpośrednio do kontenera
+TiffWriter(..., bigtiff=True).
+
+Model Matematyczny Pre-Skalowania: Korekcja
+Aberracji Chromatycznej i Dekonwolucja
+Richardsona-Lucy'ego w 32-bitowej Przestrzeni
+Liniowej
+Wykonywanie algorytmów nadrozdzielczości (Super Resolution) bezpośrednio na obrazie
+obarczonym degradacją optyczną prowadzi do nieliniowego wzmocnienia wad soczewki: sieci
+neuronowe interpretują kolorowe obwódki dyspersyjne jako zamierzone struktury krawędziowe,
+a rozmycie dyfrakcyjne jako miękką teksturę. Z tego powodu proces fizycznej korekcji optycznej
+musi zostać przeprowadzony przed etapem skalowania, w 32-bitowej przestrzeni liniowej
+(float32), gdzie wartości pikseli są wprost proporcjonalne do liczby zarejestrowanych fotonów.
+
+Transformacja do Przestrzeni Liniowej i Wielomianowa Korekcja
+Poprzecznej Aberracji Chromatycznej (LCA)
+Surowe dane z matrycy (po demozajkowaniu) lub obrazy zdekodowane z przestrzeni nieliniowej
+sRGB podlegają w pierwszym kroku linearyzacji odwrotną funkcją transferu elektro-optycznego
+(EOTF):
+I_{\text{lin}}(u, v, c) = \begin{cases} \frac{I_{\text{sRGB}}(u, v, c)}{12.92} & \text{dla }
+I_{\text{sRGB}}(u, v, c) \le 0.04045 \\ \left( \frac{I_{\text{sRGB}}(u, v, c) + 0.055}{1.055}
+\right)^{2.4} & \text{dla } I_{\text{sRGB}}(u, v, c) > 0.04045 \end{cases}
+gdzie (u, v) \in \Omega oznaczają współrzędne piksela, natomiast c \in \{R, G, B\} indeks kanału
+spektralnego.
+Zjawisko aberracji chromatycznej wynika z dyspersji szkła optycznego — współczynnik
+załamania światła zależy od długości fali \lambda, przez co składowe czerwona (R), zielona (G)
+i niebieska (B) są załamywane pod różnymi kątami i ogniskują się w różnych pozycjach.
+Poprzeczna aberracja chromatyczna (Lateral Chromatic Aberration, LCA) objawia się jako
+zależne od długości fali przesunięcie radialne rosnące ku brzegom pola widzenia (FOV),
+szczególnie widoczne jako czerwone lub niebieskie/cyjanowe obwódki wzdłuż
+wysokokontrastowych krawędzi tangencjalnych (prostopadłych do promienia wodzącego
+wychodzącego ze środka optycznego). Ponieważ układy autofokusa w aparatach cyfrowych
+ustawiają ostrość na kanale zielonym, a matryce Bayera posiadają dwukrotnie więcej pikseli
+zielonych niż czerwonych lub niebieskich, kanał zielony (G) stanowi geometryczną płaszczyznę
+<PARSED TEXT FOR PAGE: 4 / 64>
+referencyjną.
+Niech (u_0, v_0) oznacza środek optyczny soczewki (Principal Point), a R_{\max} =
+\sqrt{(W/2)^2 + (H/2)^2} promień normalizujący. Znormalizowane współrzędne względem środka
+optycznego wynoszą:
+x = \frac{u - u_0}{R_{\max}}, \quad y = \frac{v - v_0}{R_{\max}}, \quad r = \sqrt{x^2 + y^2}
+Zgodnie z teorią optyczną, współczynnik przeskalowania radialnego dla kanałów c \in \{R, B\}
+względem kanału referencyjnego G opisuje wielomian zawierający wyłącznie parzyste potęgi
+promienia r, ograniczony w zastosowaniach precyzyjnych do stopnia szóstego lub ósmego.
+Uwzględniając dodatkowo dystorsję decentrującą (tangencjalną) wynikającą z niedokładności
+centrowania elementów optycznych, pełny model geometrycznej korekcji LCA przyjmuje postać:
+\begin{bmatrix} x_c^{\text{corr}} \\ y_c^{\text{corr}} \end{bmatrix} = \underbrace{\left( 1 +
+\alpha_{c,2} r^2 + \alpha_{c,4} r^4 + \alpha_{c,6} r^6 + \alpha_{c,8} r^8 \right)}_{p_c(r) \text{ —
+wielomian radialny parzystego rzędu}} \begin{bmatrix} x \\ y \end{bmatrix} +
+\underbrace{\begin{bmatrix} 2 \tau_{c,1} x y + \tau_{c,2} (r^2 + 2x^2) \\ \tau_{c,1} (r^2 + 2y^2) +
+2 \tau_{c,2} x y \end{bmatrix}}_{\text{korekcja decentrowania}}
+W przypadku braku fabrycznego profilu kalibracyjnego obiektywu, wektor parametrów
+\boldsymbol{\theta}_c = [\alpha_{c,2}, \alpha_{c,4}, \alpha_{c,6}, \alpha_{c,8}, \tau_{c,1},
+\tau_{c,2}]^T wyznacza się automatycznie przed rekonstrukcją poprzez minimalizację błędu
+średniokwadratowego (MSE) znormalizowanych gradientów krawędzi tangencjalnych pomiędzy
+subpikselowo próbkowanym kanałem c \in \{R, B\} a kanałem referencyjnym G:
+\boldsymbol{\theta}_c^* = \arg\min_{\boldsymbol{\theta}_c} \sum_{(x,y) \in \Omega_{\text{tang}}}
+\left\| \frac{\nabla I_c\left(x_c^{\text{corr}}(\boldsymbol{\theta}_c),
+y_c^{\text{corr}}(\boldsymbol{\theta}_c)\right)}{\|\nabla I_c\|_\epsilon} - \frac{\nabla I_G(x,
+y)}{\|\nabla I_G\|_\epsilon} \right\|_2^2
+gdzie \Omega_{\text{tang}} oznacza podzbiór bloków obrazu o silnym gradiencie kierunkowym
+zarówno w kanale zielonym, jak i korygowanym, zorientowanym prostopadle do wektora
+radialnego \mathbf{r} = [x, y]^T. Próbkowanie subpikselowe skorygowanych płaszczyzn R i B
+odbywa się w wielokrotnych krokach subpikselowych za pomocą interpolacji dwusześciennej
+(Bicubic) w 32-bitowej przestrzeni liniowej.
+
+Wyprowadzenie Dekonwolucji Richardsona-Lucy'ego z Rozkładu
+Poissona i Regularyzacji Total Variation
+Po geometrycznym wyrównaniu kanałów barwnych obraz nadal podlega rozmyciu
+wynikającemu z dyfrakcji, aberracji sferycznej, astygmatyzmu saggitalnego i tangencjalnego
+oraz podłużnej aberracji chromatycznej (Longitudinal Chromatic Aberration, LoCA), która
+powoduje, że różne długości fal ogniskują się w różnych odległościach głównych wzdłuż osi
+optycznej. Degradację tę opisuje splot z parametryczną funkcją rozmycia punktu (Point Spread
+Function, PSF) h_c, charakteryzowaną w każdym punkcie pola widzenia trójką parametrów
+(\theta_c, \sigma_c, \rho_c) — kątem orientacji, dyspersją radialną oraz eliptycznością
+astygmatyczną dla każdego kanału c \in \{R, G, B\}, co łącznie daje dziewięcioparametrowy
+lokalny model rozmycia RGB.
+W ujęciu wektorowo-macierzowym niech \mathbf{x} \in \mathbb{R}_+^N oznacza
+wektoryzowany, idealnie ostry obraz liniowy o N pikselach, \mathbf{A} \in \mathbb{R}_+^{N
+\times N} liniowy operator splotu z jądrem PSF h_c, natomiast \mathbf{b} \in \mathbb{R}_+^N
+stały wektor tła reprezentujący prąd ciemny matrycy i szum odczytu. Ze względu na kwantową
+naturę rejestracji fotonów w detektorze, liczba zliczeń w każdym pikselu \mathbf{y} \in
+<PARSED TEXT FOR PAGE: 5 / 64>
+\mathbb{R}_+^N podlega niezależnemu przesuniętemu procesowi Poissona:
+\mathbf{y} \sim \mathcal{P}(\mathbf{A}\mathbf{x} + \mathbf{b})
+Funkcja wiarygodności (Likelihood) dla całego detektora o N pikselach przyjmuje postać
+iloczynową:
+p(\mathbf{y} \mid \mathbf{x}) = \prod_{n=1}^N \frac{\left([\mathbf{A}\mathbf{x} +
+\mathbf{b}]_n\right)^{y_n} \exp\left(-[\mathbf{A}\mathbf{x} + \mathbf{b}]_n\right)}{y_n!} =
+\exp\left(-(\mathbf{A}\mathbf{x} + \mathbf{b})^T \mathbf{1}\right) \cdot
+\exp\left(\log(\mathbf{A}\mathbf{x} + \mathbf{b})^T \mathbf{y}\right) \cdot \prod_{n=1}^N
+\frac{1}{y_n!}
+gdzie \mathbf{1} = [1, 1, \dots, 1]^T \in \mathbb{R}^N, a funkcja logarytmiczna działa po
+współrzędnych. Poszukując estymatora największej wiarygodności (Maximum Likelihood
+Estimator, MLE), maksymalizuje się logarytm funkcji wiarygodności L(\mathbf{x}) = \log
+p(\mathbf{y} \mid \mathbf{x}) (co jest matematycznie równoważne minimalizacji dywergencji
+Kullbacka-Leiblera d(\mathbf{y} \parallel \mathbf{A}\mathbf{x} + \mathbf{b})):
+L(\mathbf{x}) = -(\mathbf{A}\mathbf{x} + \mathbf{b})^T \mathbf{1} + \mathbf{y}^T
+\log(\mathbf{A}\mathbf{x} + \mathbf{b}) - \sum_{n=1}^N \log(y_n!)
+Ponieważ człon \sum_{n=1}^N \log(y_n!) jest stałą niezależną od \mathbf{x}, nie wpływa na
+położenie maksimum. Obliczając gradient funkcji L(\mathbf{x}) względem wektora \mathbf{x},
+otrzymuje się:
+\nabla_{\mathbf{x}} L(\mathbf{x}) = \mathbf{A}^T
+\mathrm[span_82](start_span)[span_82](end_span){diag}(\mathbf{A}\mathbf{x} +
+\mathbf{b})^{-1} \mathbf{y} - \mathbf{A}^T \mathbf{1}
+Przyrównując gradient do wektora zerowego (\nabla_{\mathbf{x}} L(\mathbf{x}) = \mathbf{0}) i
+stosując algorytm Expectation-Maximization (ML-EM) prowadzący do multiplikatywnego
+schematu punktu stałego, otrzymujemy:
+\mathbf{A}^T \mathbf{1} = \mathbf{A}^T \mathrm{diag}(\mathbf{A}\mathbf{x} + \mathbf{b})^{-1}
+\mathbf{y} \implies \mathbf{1} = \mathrm{diag}(\mathbf{A}^T \mathbf{1})^{-1} \left[ \mathbf{A}^T
+\mathrm{diag}(\mathbf{A}\mathbf{x} + \mathbf{b})^{-1} \mathbf{y} \right]
+Mnożąc obie strony komponentowo przez \mathbf{x}_k, uzyskujemy dokładne równanie
+iteracyjne algorytmu Richardsona-Lucy'ego dla nieokresowych warunków brzegowych:
+\mathbf{x}_{k+1} =
+\math[span_92](start_span)[span_92](end_span)[span_95](start_span)[span_95](end_span)rm{
+diag}(\mathbf{A}^T \mathbf{1})^{-1} \mathrm{diag}\left[ \mathbf{A}^T
+\mathrm{diag}(\mathbf{A}\mathbf{x}_k + \mathbf{b})^{-1} \mathbf{y} \right] \mathbf{x}_k
+W przypadku gdy macierz \mathbf{A} jest blokowo-cyrkulantna i znormalizowana tak, że
+\mathbf{A}^T \mathbf{1} = \mathbf{1}, czynnik czułości brzegowej \mathrm{diag}(\mathbf{A}^T
+\mathbf{1})^{-1} redukuje się do jedności. Jednak przy kafelkowym przetwarzaniu rzeczywistych
+fotografii z nieokresowymi warunkami brzegowymi macierz \mathbf{A} ma inną strukturę i
+wektor normalizacyjny \mathbf{s} = \mathbf{A}^T \mathbf{1} jest nietrywialny; musi on być
+wyznaczany jawnie na początku obliczeń poprzez splot maski jednostkowej z operatorem
+sprzężonym \mathbf{A}^T (transponowanym jądrem PSF h_c^*), co całkowicie eliminuje
+artefakty pierścieniowe (ringing) na krawędziach kafelków.
+Ponieważ klasyczny algorytm ML-EM maksymalizuje wiarygodność za wszelką cenę bez
+wiedzy a priori o gładkości rozwiązania, przy większej liczbie iteracji wzmacnia szum, generując
+charakterystyczne szpilkowe artefakty (spiky images) nawet przy wczesnym zatrzymaniu.
+Wprowadzając regularyzację Total Variation E_{\text{TV}}(\mathbf{x}) = \int_\Omega \|\nabla
+\mathbf{x}\|_\epsilon \, \mathrm{d}\Omega z wagą \lambda_{\text{TV}}, zmodyfikowany krok
+aktualizacyjny Richardsona-Lucy'ego-TV (RL-TV) w zapisie operatorowym dla każdego kanału c
+<PARSED TEXT FOR PAGE: 6 / 64>
+\in \{R, G, B\} przyjmuje postać:
+I_c^{(k+1)} = \frac{I_c^{(k)}}{h_c^* * \mathbf{1} - \lambda_{\text{TV}} \nabla \cdot \left(
+\frac{\nabla I_c^{(k)}}{\sqrt{\|\nabla I_c^{(k)}\|_2^2 + \epsilon^2}} \right)} \odot \left[ h_c^* * \left(
+\frac{I_c^{\text{obs}}}{h_c * I_c^{(k)} + b_c} \right) \right]
+gdzie h_c^*(u, v) = h_c(-u, -v) jest sprzężonym (odwróconym przestrzennie) jądrem PSF dla
+kanału c, a \epsilon = 10^{-6} gwarantuje różniczkowalność członu TV w obszarach
+jednorodnych.
+
+Modelowanie Optycznego PSF Pełnoklatkowego i Maska Głębi
+Ostrości Chroniąca Bokeh
+Dla obiektywu pełnoklatkowego (np. o ogniskowej 50\text{ mm} i średnicy źrenicy wyjściowej
+5–25\text{ mm}) funkcja rozmycia punktu h_c(\xi, \eta) jest aproksymowana przestrzennie
+zmiennym filtrem Gaussa uwzględniającym astygmatyzm saggitalny i tangencjalny oraz
+podłużną aberrację chromatyczną (LoCA) dla kanałów c \in \{R, G, B\}:
+h_c(\xi, \eta) = \frac{1}{Z_c} \exp\left( -\frac{1}{2} \begin{bmatrix} \xi & \eta \end{bmatrix}
+\mathbf{R}(\theta_c)^T \begin{bmatrix} \sigma_{c,\text{rad}}^{-2}(r) & 0 \\ 0 &
+\sigma_{c,\text{tan}}^{-2}(r) \end{bmatrix} \mathbf{R}(\theta_c) \begin{bmatrix} \xi \\ \eta
+\end{bmatrix} \right), \quad \sigma_{c,\text{rad}}(r) = \sigma_{c,0} \left(1 + \kappa_c r^2\right)
+gdzie \mathbf{R}(\theta_c) jest dwuwymiarową macierzą obrotu o kąt \theta_c = \arctan2(y, x) w
+danym punkcie pola widzenia, a Z_c stałą normalizującą \sum_{\xi,\eta} h_c(\xi, \eta) = 1.
+Aby uchronić rozmyte tło (bokeh) przed wyostrzeniem dekonwolucyjnym oraz halucynacją
+sztucznych detali w sieciach dyfuzyjnych, definiuje się hybrydową maskę głębi ostrości
+\mathcal{M}_{\text{DoF}}(u, v) \in [0, 1]. Wykorzystuje ona znormalizowaną mapę głębi
+\hat{D}(u, v) \in [0, 1] w połączeniu z lokalnym estymatorem energii wysokich częstotliwości
+(stosunek wariancji operatora Laplace'a do lokalnego odchylenia standardowego)
+przefiltrowanym filtrem kierunkowym (Guided Filter) \mathcal{G}_{I_G, r_g, \epsilon_g}:
+\mathcal{M}_{\text{DoF}}(u, v) = \mathcal{G}_{I_G, r_g, \epsilon_g} \left( \sigma_{\text{sig}}\left(
+\gamma_D \left(\hat{D}(u, v) - \tau_D\right) \right) \cdot \sigma_{\text{sig}}\left( \gamma_E \left(
+\frac{\|\Delta I_G(u, v)\|_2}{\|\nabla I_G(u, v)\|_2 + \delta} - \tau_E \right) \right) \right)
+gdzie \sigma_{\text{sig}}(z) = (1 + e^{-z})^{-1}. W całym trójstopniowym przepływie sygnału
+fizycznej restauracji optycznej i bezszwowego składania kafelków 400 MP najpierw dyspersja
+radialna kanałów czerwonego i niebieskiego zostaje subpikselowo wyrównana do
+geometrycznej płaszczyzny referencyjnej kanału zielonego. Następnie dekonwolucja
+Richardsona-Lucy'ego wyostrza wyłącznie płaszczyznę ostrości pierwszego planu zdefiniowaną
+przez maskę głębi \mathcal{M}_{\text{DoF}}, izolując kremowy bokeh w tle od wzmocnienia
+szumu Poissona. Finalny obraz po dekonwolucji przed skalowaniem jest interpolacją liniową w
+przestrzeni 32-bitowej:
+I_c^{\text{pre-SR}}(u, v) = \mathcal{M}_{\text{DoF}}(u, v) \cdot I_c^{(K)}(u, v) + \left(1 -
+\mathcal{M}_{\text{DoF}}(u, v)\right) \cdot I_c^{\text{LCA}}(u, v)
+Dzięki temu obszary znajdujące się w płaszczyźnie ostrości (\mathcal{M}_{\text{DoF}} \to 1)
+odzyskują pełną mikrokontrastowość optyczną, podczas gdy krążki rozproszenia w tle
+(\mathcal{M}_{\text{DoF}} \to 0) zachowują naturalną, gładką charakterystykę przed
+przekazaniem do etapu separacji częstotliwościowej i strumieniowego kafelkowania z oknem
+Gaussa do kontenera BigTIFF.
+
+Specyfikacja 12-Etapowego Potoku Rekonstrukcji
+<PARSED TEXT FOR PAGE: 7 / 64>
+Obrazu 400 MP (Out-of-Core Memmap)
+Aby zagwarantować całkowitą odporność na błędy Out Of Memory przy limicie 12 GB
+LPDDR5X w Samsungu S24 Ultra, przetwarzanie zostało podzielone na 12 ściśle
+odizolowanych etapów. Pomiędzy etapami pełnowymiarowe macierze 400 MP nigdy nie
+rezydują w pamięci RAM ani w pamięci układu Adreno 750 — są one mapowane bezpośrednio
+na szybkiej pamięci masowej UFS 4.0 za pomocą mechanizmu numpy.memmap, a w pamięci
+operacyjnej utrzymywany jest wyłącznie aktywny kafelek roboczy (np. 1024 \times 1024 pikseli)
+wraz z buforem zakładki.
+Nr etapu        Nazwa etapu Przestrzeń i typ Rezydencja      Operacja         Szczytowe
+                potoku        danych          pamięci        matematyczna użycie RAM
+                                                             / Algorytm
+Etap 1          Ingestia i    Liniowa RGB, RAM (Wejście) Dekodowanie 0,85\text{ GB}
+                Linearyzacja float32          \to Memmap     16-bit
+                Fotometryczna                                TIFF/RAW,
+                                                             odwrócenie
+                                                             krzywej gamma
+                                                             (EOTF),
+                                                             normalizacja
+                                                             zakresu [0, 1]
+Etap 2          Subpikselowa Liniowa RGB, Memmap \to         Kalibracja       1,10\text{ GB}
+                Korekcja      float32         Memmap         krawędzi
+                Aberracji                                    tangencjalnych,
+                Chromatycznej                                wielomian
+                (LCA)                                        radialny 8.
+                                                             stopnia p_c(r)
+                                                             dla R i B
+                                                             względem G
+Etap 3          Estymacja     Skalarna [0,1], RAM / ONNX Inferencja           0,95\text{ GB}
+                Maski Głębi   float16         \to Memmap     modelu głębi +
+                Ostrości i                                   lokalna energia
+                Ochrony Bokeh                                Laplace'a +
+                                                             Guided Filter
+                                                             (\mathcal{M}_{\
+                                                             text{DoF}})
+Etap 4          Dekonwolucja Liniowa RGB, Kafelki w RAM Iteracyjna            1,40\text{ GB}
+                Optyczna PSF float32          \to Memmap     dekonwolucja
+                Richardsona-L                                ML-EM z
+                ucy'ego                                      anizotropowym
+                (RL-TV)                                      PSF
+                                                             pełnoklatkowy
+                                                             m,
+                                                             regularyzacją
+                                                             TV i maską
+                                                             \mathcal{M}_{\t
+                                                             ext{DoF}}
+Etap 5          Detekcja      Wektory         ONNX Runtime Detekcja           0,75\text{ GB}
+<PARSED TEXT FOR PAGE: 8 / 64>
+Nr etapu   Nazwa etapu    Przestrzeń i typ Rezydencja    Operacja         Szczytowe
+           potoku         danych           pamięci       matematyczna użycie RAM
+                                                         / Algorytm
+           Twarzy i         \mathbb{R}^{51 (RAM)         punktów
+           Ekstrakcja       2}, float32                  kluczowych
+           Wektorów                                      (5-point
+           Tożsamości                                    landmarks) i
+           (Identity Guard)                              ekstrakcja
+                                                         512-wymiarowy
+                                                         ch osadzeń
+                                                         ArcFace R100
+                                                         (\mathbf{e}_{\te
+                                                         xt{orig}})
+Etap 6     Alokacja         Nieliniowa/Linio UFS 4.0     Inicjalizacja    0,60\te[span_1
+           Macierzy         wa, uint16 /     numpy.memma plików wymiany 22](start_span)[
+           Docelowych       float16          p           na dysku         span_122](end
+           400 MP i                                      (20000 \times _span)[span_1
+           Bazowa                                        20000 \times 3) 24](start_span)[
+           Interpolacja                                  i kafelkowe      span_124](end
+                                                         skalowanie       _span)[span_1
+                                                         Lanczos-4        26](start_span)[
+                                                                          span_126](end
+                                                                          _span)xt{ GB}
+Etap 7     Dekompozycja Pasma f_L            Memmap \to  Kafelkowa        0,80\text{ GB}
+           Częstotliwościo (uint16), f_H     Memmap      filtracja
+           wa (Wavelet      (float16)                    dolnoprzepusto
+           Frequency                                     wa o dużym
+           Separation)                                   promieniu
+                                                         (\sigma_L):
+                                                         wydzielenie
+                                                         bazy barwnej
+                                                         f_L = G_\sigma
+                                                         * I oraz detalu
+                                                         f_H = I - f_L
+Etap 8     Kaskadowe        Kafelki 1024     PyTorch /   Przetwarzanie 2,60\text{ GB}
+           Skalowanie       \times 1024,     ONNX \to    kafelkowe z
+           Super            float16          Memmap      wagami
+           Resolution z                                  Gaussa W(u,v)
+           Oknem Gaussa                                  i normalizacją
+                                                         \sum W_i = 1
+                                                         (eliminacja
+                                                         szwów na
+                                                         zakładkach)
+Etap 9     Rekonstrukcja Wycięte ROI ONNX /              Transformacja 2,20\text{ GB}
+           Twarzy           twarzy 512       PyTorch \to afiniczna
+           (CodeFormer + \times 512,         Memmap      Umeyamy,
+           ControlNet       float32                      rekonstrukcja
+<PARSED TEXT FOR PAGE: 9 / 64>
+Nr etapu       Nazwa etapu     Przestrzeń i typ Rezydencja     Operacja        Szczytowe
+               potoku          danych           pamięci        matematyczna użycie RAM
+                                                               / Algorytm
+               Inpaint +                                       CodeFormer
+               ArcFace)                                        (w=0.75) +
+                                                               ControlNet
+                                                               Inpaint,
+                                                               weryfikacja
+                                                               \cos(\mathbf{e}
+                                                               _{\text{orig}},
+                                                               \mathbf{e}_{\te
+                                                               xt{new}})
+Etap 10        Fuzja           Kafelki 2048    Memmap \to      Połączenie      0,90\text{ GB}
+               Częstotliwościo \times 2048,    Memmap          nienaruszonej
+               wa (Faithful    float32                         bazy niskich
+               Restoration                                     częstotliwości
+               Synthesis)                                      f_L z
+                                                               wygenerowany
+                                                               m detalem
+                                                               wysokoczęstotli
+                                                               wościowym
+                                                               f_H^{\text{SR}}
+                                                               modulowanym
+                                                               maską
+                                                               \mathcal{M}_{\t
+                                                               ext{DoF}}
+Etap 11        Mapowanie       sRGB /          Memmap \to      Konwersja do 0,70\text{ GB}
+               Tonów,          ProPhoto,       Memmap          docelowej
+               Konwersja       uint16                          krzywej TRC i
+               Przestrzeni                                     rzutowanie do
+               Barw i                                          zakresu [0,
+               Kwantyzacja                                     65535] (uint16)
+               16-bit
+Etap 12        Strumieniowy    Kontener TIFF Generator \to     Zapis              0,55\text{ GB}
+               Zapis           v43, uint16   Dysk              kafelkowy
+               Kafelkowy do                                    TiffWriter(bigtiff
+               Pliku 16-bit                                    =True) z
+               BigTIFF                                         kompresją
+                                                               bezstratną
+                                                               Deflate i
+                                                               zwalnianiem
+                                                               cache stron
+Matematyka Bezszwowego Kafelkowania Gaussa i Separacji
+Częstotliwościowej
+Podczas skalowania obrazu do 20000 \times 20000 pikseli w podziale na kafelki T_{i,j} o
+wymiarach S \times S (np. 1024 \times 1024) z krokiem przesunięcia (stride) d = S - O (gdzie O
+<PARSED TEXT FOR PAGE: 10 / 64>
+jest szerokością zakładki, np. 256 pikseli), niezależna inferencja sieci neuronowej na sąsiednich
+kafelkach wprowadza nieciągłości brzegowe. Aby zapewnić gładkość klasy C^\infty na
+granicach łączenia, każdy kafelek jest mnożony przez dwuwymiarowe okno wagowe Gaussa
+W(u, v):
+W(u, v) = \exp\left( -\frac{\left(u - \frac{S-1}{2}\right)^2 + \left(v - \frac{S-1}{2}\right)^2}{2
+\sigma_T^2} \right), \quad u, v \in \{0, \dots, S-1\}
+gdzie \sigma_T = 0.25 \cdot S. W globalnym buforze akumulatora memmap
+\mathcal{A}_{\text{img}} oraz buforze wag \mathcal{A}_{\text{weight}} realizowane jest
+rzutowanie z zachowaniem rozkładu jedności (Partition of Unity):
+\hat{I}_{\text{SR}}(U, V) = \frac{\sum_{([span_129](start_span)[span_129](end_span)i,j) \in
+\mathcal{T}(U,V)} W(U - U_i, V - V_j) \cdot \Phi_{\text{SR}}\left(T_{i,j}\right)(U - U_i, V -
+V_j)}{\sum_{(i,j) \in \mathcal{T}(U,V)} W(U - U_i, V - V_j)}
+Mechanizm Separacji Częstotliwościowej (Frequency Separation) gwarantuje natomiast tzw.
+Faithful Restoration (wierną rekonstrukcję): model generatywny/SR nie ma prawa zmienić
+lokalnej chrominancji, balansu bieli ani globalnego rozkładu światłocienia. Obraz bazowy
+przeskalowany filtrem Lanczos-4 (I_{\text{base}}) oraz obraz wygenerowany przez sieć SR
+(\hat{I}_{\text{SR}}) są poddawane filtracji dolnoprzepustowej z tym samym jądrem Gaussa
+G_{\sigma_{\text{FS}}}:
+f_L^{\text{base}} = G_{\sigma_{\text{FS}}} * I_{\text{base}}, \quad f_H^{\text{SR}} =
+\hat{I}_{\text{SR}} - \left(G_{\sigma_{\text{FS}}} * \hat{I}_{\text{SR}}\right), \quad
+f_H^{\text{base}} = I_{\text{base}} - f_L^{\text{base}}
+Finalna synteza łączy niskie częstotliwości oryginału z wysokimi częstotliwościami modelu AI
+wyłącznie w obszarach ostrych wskazanych przez maskę głębi ostrości
+\mathcal{M}_{\text{DoF}}:
+
+I_{\text{final}}(U, V) = f_L^{\text{base}}(U, V) + \mathcal{M}_{\text{DoF}}(U, V) \cdot
+\beta_{\text{detail}} f_H^{\text{SR}}(U, V) + \left(1 - \mathcal{M}_{\text{DoF}}(U, V)\right) \cdot
+f_H^{\text{base}}(U, V)
+Moduł Ochrony Tożsamości Twarzy (Identity Guard ArcFace R100 +
+CodeFormer)
+Modele rekonstrukcji twarzy, takie jak CodeFormer, wykorzystują wyuczone słowniki
+dyskretnych kodów (learned discrete codebooks) do redukcji niepewności mapowania
+zdegradowanych wejść na ostre reprezentacje twarzy, przewyższając wcześniejsze metody pod
+względem jakości i wierności. Przy silnej degradacji lub agresywnym inpaintingu istnieje jednak
+ryzyko dryfu tożsamości (zmiana kształtu oczu, geometrii nosa lub proporcji ust). W
+zaprojektowanym potoku moduł Identity Guard ekstrahuje przed skalowaniem wektor cech
+twarzy za pomocą modelu ONNX ArcFace R100 (architektura ResNet-100 trenowana z funkcją
+straty Additive Angular Margin Loss). Dla każdej wykrytej twarzy m po wyrównaniu afinicznym
+(transformacja podobieństwa Umeyamy względem 5 kanonicznych punktów kluczowych)
+obliczany jest znormalizowany wektor jednostkowy \mathbf{e}_{\text{orig}}^{(m)} \in
+\mathbb{R}^{512} (\|\mathbf{e}_{\text{orig}}^{(m)}\|_2 = 1).
+Po przeprowadzeniu rekonstrukcji obszaru twarzy za pomocą modelu ONNX CodeFormer (z
+parametrem wierności w \in [0, 1]) oraz kafelkowego ControlNet Inpaint, wyodrębniany jest nowy
+wektor cech \mathbf{e}_{\text{rest}}^{(m)} \in \mathbb{R}^{512}. Podobieństwo cosinusowe
+tożsamości wynosi:
+S_{\text{id}}^{(m)} = \left\langle \mathbf{e}_{\text{orig}}^{(m)}, \mathbf{e}_{\text{rest}}^{(m)}
+<PARSED TEXT FOR PAGE: 11 / 64>
+\right\rangle = \sum_{d=1}^{512} e_{\text{orig}, d}^{(m)} \cdot e_{\text{rest}, d}^{(m)}
+Jeżeli S_{\text{id}}^{(m)} \ge \tau_{\text{id}} (gdzie próg produkcyjny wynosi \tau_{\text{id}} =
+0.78), zrekonstruowana twarz jest wklejana z pełną wagą. Jeżeli S_{\text{id}}^{(m)} <
+\tau_{\text{id}}, algorytm automatycznie zwiększa wagę wierności CodeFormera (w \leftarrow
+\min(0.95, w + 0.15)) oraz stosuje tłumik liniowy \alpha_{\text{id}} = \max\left(0,
+\frac{S_{\text{id}}^{(m)} - \tau_{\min}}{\tau_{\text{id}} - \tau_{\min}}\right), mieszając wyłącznie
+wysokie częstotliwości porów skóry z oryginalną geometrią twarzy, co matematycznie wyklucza
+utratę podobieństwa portretowanej osoby.
+
+Produkcyjny Silnik Rekonstrukcji 400 MP w Języku
+Python (Clean Architecture, PyTorch, OpenCV, ONNX,
+tifffile)
+Poniższy kod stanowi kompletny, samodzielny silnik produkcyjny CLI napisany zgodnie z
+zasadami Clean Architecture (warstwy: Domain, Infrastructure, Application, CLI Presentation).
+Kod realizuje wszystkie 12 etapów potoku: 32-bitową korekcję aberracji chromatycznej (LCA),
+dekonwolucję Richardsona-Lucy'ego z regularyzacją TV i pełnoklatkowym PSF, ochronę bokeh
+(Depth/Laplacian Guided Mask), bezszwowe kafelkowanie Gaussa, separację
+częstotliwościową, rekonstrukcję twarzy CodeFormer + ControlNet Inpaint z weryfikacją
+wektorową ONNX InsightFace (ArcFace R100) oraz strumieniowy zapis kafelkowy do
+16-bitowego pliku BigTIFF przy rygorystycznym zachowaniu limitu pamięci RAM Samsunga
+S24 Ultra.
+#!/usr/bin/env python3​
+# -*- coding: utf-8 -*-​
+"""​
+Produkcyjny Silnik Rekonstrukcji Obrazu 400 MP (Out-of-Core Memmap +
+16-bit BigTIFF)​
+Zoptymalizowany pod budżet pamięciowy Samsung Galaxy S24 Ultra (12 GB
+LPDDR5X / UFS 4.0).​
+​
+Architektura: Clean Architecture (Domain -> Infrastructure ->
+Application -> CLI)​
+Wymagane biblioteki: numpy, torch, torchvision, opencv-python,
+tifffile, onnxruntime​
+"""​
+​
+from __future__ import annotations​
+​
+import argparse​
+import gc​
+import logging​
+import math​
+import os​
+import shutil​
+import sys​
+import tempfile​
+<PARSED TEXT FOR PAGE: 12 / 64>
+import time​
+from abc import ABC, abstractmethod​
+from dataclasses import dataclass, field​
+from pathlib import Path​
+from typing import Dict, Generator, Iterable, List, Optional, Tuple​
+​
+import cv2​
+import numpy as np​
+import tifffile​
+import torch​
+import torch.nn as nn​
+import torch.nn.functional as F​
+​
+try:​
+    import onnxruntime as ort​
+    HAS_ONNX = True​
+except ImportError:​
+    HAS_ONNX = False​
+​
+​
+#
+======================================================================
+========​
+# 1. WARSTWA DOMENOWA (DOMAIN LAYER: ENTITIES, VALUE OBJECTS & PORTS)​
+#
+======================================================================
+========​
+​
+@dataclass(frozen=True)​
+class OpticalPSFConfig:​
+    """Parametry fizyczne pełnoklatkowego modelu optycznego i
+aberracji."""​
+    focal_length_mm: float = 50.0​
+    f_number: float = 2.8​
+    sensor_width_mm: float = 36.0​
+    sensor_height_mm: float = 36.0​
+    # Współczynniki parzystego wielomianu radialnego LCA (stopień 8)
+dla R i B względem G​
+    lca_poly_red: Tuple[float, float, float, float] = (-0.0012,
+0.00045, -0.00008, 0.00001)​
+    lca_poly_blue: Tuple[float, float, float, float] = (0.0018,
+-0.00060, 0.00011, -0.000015)​
+    # Parametry dyspersji podłużnej (LoCA) i astygmatyzmu PSF (sigma
+bazowe w pikselach)​
+    psf_sigma_r: float = 1.15​
+    psf_sigma_g: float = 0.85​
+    psf_sigma_b: float = 1.35​
+    coma_anisotropy: float = 0.35​
+<PARSED TEXT FOR PAGE: 13 / 64>
+   rl_iterations: int = 12​
+   rl_tv_weight: float = 0.0025​
+   noise_floor_b: float = 1e-4​
+​
+​
+@dataclass(frozen=True)​
+class PipelineConfig:​
+    """Konfiguracja głównego 12-etapowego potoku rekonstrukcji 400
+MP."""​
+    target_megapixels: float = 400.0​
+    tile_size: int = 1024​
+    tile_overlap: int = 256​
+    bigtiff_tile_size: int = 512​
+    freq_sep_sigma: float = 9.0​
+    high_freq_boost: float = 1.18​
+    dof_depth_threshold: float = 0.42​
+    dof_sharpness_threshold: float = 0.18​
+    codeformer_fidelity_w: float = 0.75​
+    arcface_similarity_threshold: float = 0.78​
+    arcface_min_threshold: float = 0.55​
+    max_ram_budget_gb: float = 5.5​
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"​
+    use_fp16_inference: bool = True​
+    work_dir: Path = field(default_factory=lambda:
+Path(tempfile.gettempdir()) / "s24u_400mp_swap")​
+    optical: OpticalPSFConfig =
+field(default_factory=OpticalPSFConfig)​
+​
+​
+@dataclass​
+class FaceIdentityRecord:​
+    """Encja przechowująca geometrię i wektor tożsamości ArcFace R100
+dla wykrytej twarzy."""​
+    face_id: int​
+    bbox_norm: Tuple[float, float, float, float] # (x1, y1, x2, y2) w
+skali [0, 1]​
+    landmarks_norm: np.ndarray                    # shape (5, 2) w
+skali [0, 1]​
+    embedding_512d: np.ndarray                    # znormalizowany L2
+wektor R^512​
+    post_similarity: float = 1.0​
+​
+​
+@dataclass(frozen=True)​
+class TileCoordinate:​
+    """Współrzędne pojedynczego kafelka w przestrzeni obrazu
+docelowego."""​
+    y0: int​
+<PARSED TEXT FOR PAGE: 14 / 64>
+    y1: int​
+    x0: int​
+    x1: int​
+​
+    @property​
+    def height(self) -> int:​
+        return self.y1 - self.y0​
+​
+    @property​
+    def width(self) -> int:​
+        return self.x1 - self.x0​
+​
+​
+class SuperResolutionPort(ABC):​
+    """Port abstrakcyjny dla silnika nadrozdzielczości (PyTorch /
+ONNX)."""​
+    @abstractmethod​
+    def enhance_tile(self, tile_rgb_norm: np.ndarray) -> np.ndarray:​
+        """Przyjmuje kafelek float32 [0,1] (H,W,3) i zwraca
+zrekonstruowany kafelek float32 [0,1]."""​
+        raise NotImplementedError​
+​
+​
+class FaceAnalysisPort(ABC):​
+    """Port abstrakcyjny dla detekcji twarzy i ekstrakcji wektorów
+ArcFace R100."""​
+    @abstractmethod​
+    def detect_and_extract(self, img_rgb_norm: np.ndarray) ->
+List[FaceIdentityRecord]:​
+        raise NotImplementedError​
+​
+    @abstractmethod​
+    def extract_embedding_aligned(self, aligned_face_112: np.ndarray)
+-> np.ndarray:​
+        raise NotImplementedError​
+​
+​
+class FaceRestorationPort(ABC):​
+    """Port abstrakcyjny dla rekonstrukcji twarzy (CodeFormer +
+ControlNet Inpaint)."""​
+    @abstractmethod​
+    def restore_aligned_face(​
+        self,​
+        aligned_face_512: np.ndarray,​
+        inpaint_mask_512: np.ndarray,​
+        fidelity_weight: float​
+    ) -> np.ndarray:​
+        raise NotImplementedError​
+<PARSED TEXT FOR PAGE: 15 / 64>
+​
+​
+#
+======================================================================
+========​
+# 2. WARSTWA INFRASTRUKTURY (INFRASTRUCTURE LAYER)​
+#
+======================================================================
+========​
+​
+class OutOfCoreMemmapManager:​
+    """​
+    Zarządza plikami wymiany numpy.memmap na pamięci masowej UFS 4.0
+oraz kontroluje​
+    zwalnianie stron pamięci podręcznej systemu operacyjnego
+(zapobieganie OOM).​
+    """​
+​
+    def __init__(self, work_dir: Path, logger: logging.Logger) ->
+None:​
+         self.work_dir = work_dir​
+         self.logger = logger​
+         self.work_dir.mkdir(parents=True, exist_ok=True)​
+         self._active_files: List[Path] = []​
+​
+    def allocate_array(self, name: str, shape: Tuple[int, ...], dtype:
+np.dtype) -> Path:​
+         file_path = self.work_dir / f"{name}.mmap"​
+         self._active_files.append(file_path)​
+         size_gb = (math.prod(shape) * np.dtype(dtype).itemsize) /
+(1024 ** 3)​
+         self.logger.info(f"[Memmap] Alokacja bufora dyskowego
+'{name}': shape={shape}, dtype={dtype} ({size_gb:.2f} GiB)")​
+         mm = np.memmap(file_path, dtype=dtype, mode="w+", shape=shape)​
+         mm.flush()​
+         del mm​
+         return file_path​
+​
+    @staticmethod​
+    def open_view(file_path: Path, shape: Tuple[int, ...], dtype:
+np.dtype, mode: str = "r+") -> np.memmap:​
+         return np.memmap(file_path, dtype=dtype, mode=mode,
+shape=shape)​
+​
+    @staticmethod​
+    def release_memory() -> None:​
+         gc.collect()​
+         if torch.cuda.is_available():​
+<PARSED TEXT FOR PAGE: 16 / 64>
+           torch.cuda.empty_cache()​
+​
+    def cleanup(self) -> None:​
+         for path in self._active_files:​
+             try:​
+                 if path.exists():​
+                     path.unlink()​
+             except OSError as exc:​
+                 self.logger.warning(f"Nie udało się usunąć pliku
+tymczasowego {path}: {exc}")​
+         try:​
+             if self.work_dir.exists() and not
+any(self.work_dir.iterdir()):​
+                 self.work_dir.rmdir()​
+         except OSError:​
+             pass​
+​
+​
+class LinearOpticsDeconvolutionEngine:​
+    """​
+    Silnik fizycznej korekcji optycznej w 32-bitowej przestrzeni
+liniowej:​
+    1. Konwersja sRGB <-> Linear float32​
+    2. Subpikselowa korekcja poprzecznej aberracji chromatycznej (LCA)
+wielomianem 8. stopnia​
+    3. Generacja anizotropowego pełnoklatkowego PSF (uwzględniającego
+LoCA i komę/astygmatyzm)​
+    4. Dekonwolucja Richardsona-Lucy'ego z regularyzacją Total
+Variation (RL-TV) i kompensacją brzegową​
+    """​
+​
+    def __init__(self, config: OpticalPSFConfig, device: str, logger:
+logging.Logger) -> None:​
+         self.cfg = config​
+         self.device = torch.device(device)​
+         self.logger = logger​
+​
+    @staticmethod​
+    def srgb_to_linear(img_srgb: np.ndarray) -> np.ndarray:​
+         img = np.clip(img_srgb.astype(np.float32), 0.0, 1.0)​
+         return np.where(img <= 0.04045, img / 12.92, np.power((img +
+0.055) / 1.055, 2.4)).astype(np.float32)​
+​
+    @staticmethod​
+    def linear_to_srgb(img_lin: np.ndarray) -> np.ndarray:​
+         img = np.clip(img_lin.astype(np.float32), 0.0, 1.0)​
+         return np.where(img <= 0.0031308, img * 12.92, 1.055 *
+np.power(img, 1.0 / 2.4) - 0.055).astype(np.float32)​

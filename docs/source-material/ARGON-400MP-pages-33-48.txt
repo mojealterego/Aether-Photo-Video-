@@ -1,0 +1,784 @@
+AETHER / ARGON SOURCE TEXT MIRROR
+Source: Potok Rekonstrukcji Obrazu 400 MP.PDF (64 pages)
+Original file SHA256: d5f955b871a66196229d75c911fe4dd02def4211e7e77d908ec955c820b48afc
+Pages: 33-48. PDF text extraction only; charts, columns, mathematical notation and embedded code may be malformed. NOT EXECUTABLE SOURCE.
+
+<PARSED TEXT FOR PAGE: 33 / 64>
+#
+======================================================================
+========​
+​
+class Reconstruction12StageOrchestrator:​
+    """​
+    Orkiestrator realizujący kompletny 12-etapowy potok rekonstrukcji
+fotografii do 400 MP​
+    z pełną separacją częstotliwościową, ochroną bokeh, weryfikacją
+tożsamości ArcFace R100​
+    oraz kafelkowaniem Gaussa w architekturze Out-of-Core.​
+    """​
+​
+    ARCFACE_SRC_512 = InsightFaceArcFaceONNX.ARCFACE_SRC_112 * (512.0
+/ 112.0)​
+​
+    def __init__(​
+         self,​
+         config: PipelineConfig,​
+         sr_engine: SuperResolutionPort,​
+         face_analyzer: FaceAnalysisPort,​
+         face_restorer: FaceRestorationPort,​
+         dof_generator: DepthBokehMaskGenerator,​
+         logger: logging.Logger​
+    ) -> None:​
+         self.cfg = config​
+         self.sr_engine = sr_engine​
+         self.face_analyzer = face_analyzer​
+         self.face_restorer = face_restorer​
+         self.dof_generator = dof_generator​
+         self.logger = logger​
+         self.mem_mgr = OutOfCoreMemmapManager(config.work_dir, logger)​
+         self.optics = LinearOpticsDeconvolutionEngine(config.optical,
+config.device, logger)​
+         self.tiler = GaussianSeamlessTiler(config.tile_size,
+config.tile_overlap)​
+         self.bigtiff_writer =
+BigTIFFStreamWriter(config.bigtiff_tile_size, logger)​
+​
+    @staticmethod​
+    def _compute_target_400mp_dimensions(h: int, w: int, target_mp:
+float) -> Tuple[int, int]:​
+         aspect = float(w) / float(h)​
+         target_pixels = target_mp * 1_000_000.0​
+         target_h = int(round(math.sqrt(target_pixels / aspect)))​
+         target_w = int(round(target_h * aspect))​
+         target_h = max(64, (target_h // 16) * 16)​
+         target_w = max(64, (target_w // 16) * 16)​
+<PARSED TEXT FOR PAGE: 34 / 64>
+       return target_h, target_w​
+​
+    def execute_pipeline(self, input_path: Path, output_path: Path) ->
+Dict[str, float]:​
+        t_start = time.perf_counter()​
+        metrics: Dict[str, float] = {}​
+​
+        try:​
+            #
+------------------------------------------------------------------​
+            # ETAP 1: Ingestia i konwersja do 32-bitowej przestrzeni
+liniowej​
+            #
+------------------------------------------------------------------​
+            self.logger.info("=== [ETAP 1/12] Ingestia i linearyzacja
+fotometryczna (32-bit float) ===")​
+            raw_bgr = cv2.imread(str(input_path), cv2.IMREAD_ANYDEPTH
+| cv2.IMREAD_COLOR)​
+            if raw_bgr is None:​
+                raise FileNotFoundError(f"Nie można odczytać pliku
+obrazu: {input_path}")​
+            raw_rgb = cv2.cvtColor(raw_bgr, cv2.COLOR_BGR2RGB)​
+            del raw_bgr​
+​
+            if raw_rgb.dtype == np.uint16:​
+                img_srgb = raw_rgb.astype(np.float32) / 65535.0​
+            elif raw_rgb.dtype == np.uint8:​
+                img_srgb = raw_rgb.astype(np.float32) / 255.0​
+            else:​
+                img_srgb = np.clip(raw_rgb.astype(np.float32), 0.0,
+1.0)​
+            del raw_rgb​
+​
+            img_lin = self.optics.srgb_to_linear(img_srgb)​
+            del img_srgb​
+            self.mem_mgr.release_memory()​
+​
+            #
+------------------------------------------------------------------​
+            # ETAP 2: Korekcja poprzecznej aberracji chromatycznej
+(LCA)​
+            #
+------------------------------------------------------------------​
+            self.logger.info("=== [ETAP 2/12] Subpikselowa korekcja
+aberracji chromatycznej (LCA) ===")​
+            img_lca =
+self.optics.correct_chromatic_aberration_linear(img_lin)​
+            del img_lin​
+<PARSED TEXT FOR PAGE: 35 / 64>
+           self.mem_mgr.release_memory()​
+​
+            #
+------------------------------------------------------------------​
+            # ETAP 3: Generacja maski głębi ostrości i ochrony bokeh
+(M_DoF)​
+            #
+------------------------------------------------------------------​
+            self.logger.info("=== [ETAP 3/12] Estymacja maski głębi
+ostrości i ochrony bokeh ===")​
+            dof_mask_low =
+self.dof_generator.compute_dof_mask(img_lca)​
+            metrics["bokeh_protected_fraction"] = float(np.mean(1.0 -
+dof_mask_low))​
+​
+            #
+------------------------------------------------------------------​
+            # ETAP 4: 32-bitowa dekonwolucja optyczna
+Richardsona-Lucy'ego (RL-TV)​
+            #
+------------------------------------------------------------------​
+            self.logger.info("=== [ETAP 4/12] Dekonwolucja
+Richardsona-Lucy'ego z pełnoklatkowym PSF ===")​
+            img_deconv_lin =
+self.optics.deconvolve_richardson_lucy_tv(​
+                img_lca, dof_mask_low, tile_size=1024, overlap=128​
+            )​
+            del img_lca​
+            img_pre_sr = self.optics.linear_to_srgb(img_deconv_lin)​
+            del img_deconv_lin​
+            self.mem_mgr.release_memory()​
+​
+            #
+------------------------------------------------------------------​
+            # ETAP 5: Detekcja twarzy i ekstrakcja wektorów tożsamości
+ArcFace R100​
+            #
+------------------------------------------------------------------​
+            self.logger.info("=== [ETAP 5/12] Ekstrakcja wektorów
+tożsamości InsightFace (ArcFace R100) ===")​
+            face_records =
+self.face_analyzer.detect_and_extract(img_pre_sr)​
+            metrics["detected_faces"] = float(len(face_records))​
+            self.logger.info(f"[IdentityGuard] Wykryto i zabezpieczono
+twarzy: {len(face_records)}")​
+​
+            #
+------------------------------------------------------------------​
+<PARSED TEXT FOR PAGE: 36 / 64>
+             # ETAP 6: Alokacja macierzy docelowych 400 MP i bazowa
+interpolacja​
+             #
+------------------------------------------------------------------​
+             in_h, in_w, _ = img_pre_sr.shape​
+             tgt_h, tgt_w = self._compute_target_400mp_dimensions(in_h,
+in_w, self.cfg.target_megapixels)​
+             tgt_shape = (tgt_h, tgt_w, 3)​
+             metrics["target_height"] = float(tgt_h)​
+             metrics["target_width"] = float(tgt_w)​
+             metrics["actual_megapixels"] = (tgt_h * tgt_w) /
+1_000_000.0​
+​
+             self.logger.info(​
+                 f"=== [ETAP 6/12] Alokacja memmap 400 MP
+({tgt_w}x{tgt_h} = {metrics['actual_megapixels']:.1f} MP) ==="​
+             )​
+             base_mmap_path =
+self.mem_mgr.allocate_array("stage6_base_u16", tgt_shape, np.uint16)​
+             low_freq_mmap_path =
+self.mem_mgr.allocate_array("stage7_lowfreq_u16", tgt_shape,
+np.uint16)​
+             sr_acc_mmap_path =
+self.mem_mgr.allocate_array("stage8_sr_acc_f32", tgt_shape,
+np.float32)​
+             weight_mmap_path =
+self.mem_mgr.allocate_array("stage8_weights_f32", (tgt_h, tgt_w, 1),
+np.float32)​
+​
+             grid_coords = self.tiler.generate_grid(tgt_h, tgt_w)​
+             scale_y = float(in_h) / float(tgt_h)​
+             scale_x = float(in_w) / float(tgt_w)​
+​
+             base_mm = self.mem_mgr.open_view(base_mmap_path,
+tgt_shape, np.uint16, mode="r+")​
+             for tc in grid_coords:​
+                 src_y0 = max(0, int(math.floor(tc.y0 * scale_y)) - 2)​
+                 src_y1 = min(in_h, int(math.ceil(tc.y1 * scale_y)) +
+2)​
+                 src_x0 = max(0, int(math.floor(tc.x0 * scale_x)) - 2)​
+                 src_x1 = min(in_w, int(math.ceil(tc.x1 * scale_x)) +
+2)​
+​
+                 patch = img_pre_sr[src_y0:src_y1, src_x0:src_x1, :]​
+                 up_patch = cv2.resize(patch, (tc.width, tc.height),
+interpolation=cv2.INTER_LANCZOS4)​
+                 base_mm[tc.y0:tc.y1, tc.x0:tc.x1, :] =
+np.clip(up_patch * 65535.0 + 0.5, 0.0, 65535.0).astype(np.uint16)​
+<PARSED TEXT FOR PAGE: 37 / 64>
+           base_mm.flush()​
+           del base_mm, img_pre_sr​
+           self.mem_mgr.release_memory()​
+​
+            #
+------------------------------------------------------------------​
+            # ETAP 7: Separacja częstotliwościowa (Wavelet/Gaussian
+Low-Frequency Split)​
+            #
+------------------------------------------------------------------​
+            self.logger.info("=== [ETAP 7/12] Dekompozycja
+częstotliwościowa (Frequency Separation) ===")​
+            base_mm = self.mem_mgr.open_view(base_mmap_path,
+tgt_shape, np.uint16, mode="r")​
+            low_mm = self.mem_mgr.open_view(low_freq_mmap_path,
+tgt_shape, np.uint16, mode="r+")​
+            pad_fs = int(math.ceil(self.cfg.freq_sep_sigma * 3.0))​
+​
+            for tc in grid_coords:​
+                py0, py1 = max(0, tc.y0 - pad_fs), min(tgt_h, tc.y1 +
+pad_fs)​
+                px0, px1 = max(0, tc.x0 - pad_fs), min(tgt_w, tc.x1 +
+pad_fs)​
+                padded_tile = base_mm[py0:py1, px0:px1,
+:].astype(np.float32)​
+                low_padded = cv2.GaussianBlur(padded_tile, (0, 0),
+self.cfg.freq_sep_sigma)​
+                cy0, cx0 = tc.y0 - py0, tc.x0 - px0​
+                low_crop = low_padded[cy0:cy0 + tc.height, cx0:cx0 +
+tc.width, :]​
+                low_mm[tc.y0:tc.y1, tc.x0:tc.x1, :] = np.clip(low_crop
++ 0.5, 0.0, 65535.0).astype(np.uint16)​
+​
+            low_mm.flush()​
+            del base_mm, low_mm​
+            self.mem_mgr.release_memory()​
+​
+            #
+------------------------------------------------------------------​
+            # ETAP 8: Kaskadowe skalowanie Super Resolution z oknem
+Gaussa​
+            #
+------------------------------------------------------------------​
+            self.logger.info(f"=== [ETAP 8/12] Bezszwowe kafelkowanie
+Gaussa SR ({len(grid_coords)} kafelków) ===")​
+            base_mm = self.mem_mgr.open_view(base_mmap_path,
+tgt_shape, np.uint16, mode="r")​
+            sr_acc_mm = self.mem_mgr.open_view(sr_acc_mmap_path,
+<PARSED TEXT FOR PAGE: 38 / 64>
+tgt_shape, np.float32, mode="r+")​
+            w_acc_mm = self.mem_mgr.open_view(weight_mmap_path,
+(tgt_h, tgt_w, 1), np.float32, mode="r+")​
+​
+            for idx, tc in enumerate(grid_coords):​
+                tile_norm = base_mm[tc.y0:tc.y1, tc.x0:tc.x1,
+:].astype(np.float32) / 65535.0​
+                sr_tile = self.sr_engine.enhance_tile(tile_norm)​
+                g_win = self.tiler.get_window(tc.height, tc.width)​
+​
+                sr_acc_mm[tc.y0:tc.y1, tc.x0:tc.x1, :] += sr_tile *
+g_win​
+                w_acc_mm[tc.y0:tc.y1, tc.x0:tc.x1, :] += g_win​
+​
+                if (idx + 1) % 32 == 0:​
+                    sr_acc_mm.flush()​
+                    w_acc_mm.flush()​
+                    self.mem_mgr.release_memory()​
+​
+            for tc in grid_coords:​
+                w_slice = np.maximum(w_acc_mm[tc.y0:tc.y1,
+tc.x0:tc.x1, :], 1e-6)​
+                sr_acc_mm[tc.y0:tc.y1, tc.x0:tc.x1, :] = np.clip(​
+                    sr_acc_mm[tc.y0:tc.y1, tc.x0:tc.x1, :] / w_slice,
+0.0, 1.0​
+                )​
+            sr_acc_mm.flush()​
+            del base_mm, sr_acc_mm, w_acc_mm​
+            self.mem_mgr.release_memory()​
+​
+            #
+------------------------------------------------------------------​
+            # ETAP 9: Rekonstrukcja twarzy (CodeFormer + ControlNet
+Inpaint + ArcFace)​
+            #
+------------------------------------------------------------------​
+            self.logger.info("=== [ETAP 9/12] Face Inpainting
+(CodeFormer) i weryfikacja Identity Guard ===")​
+            if face_records:​
+                sr_acc_mm = self.mem_mgr.open_view(sr_acc_mmap_path,
+tgt_shape, np.float32, mode="r+")​
+                yy_512, xx_512 = np.meshgrid(​
+                    np.linspace(-1.0, 1.0, 512, dtype=np.float32),​
+                    np.linspace(-1.0, 1.0, 512, dtype=np.float32),​
+                    indexing="ij"​
+                )​
+                feather_512 = np.clip(1.0 - np.power(np.hypot(xx_512,
+yy_512), 3.0), 0.0, 1.0)​
+<PARSED TEXT FOR PAGE: 39 / 64>
+​
+                for rec in face_records:​
+                    pts_dst = rec.landmarks_norm * np.array([[tgt_w,
+tgt_h]], dtype=np.float32)​
+​
+                    bx1 = max(0, int(rec.bbox_norm[0] * tgt_w - 0.25 *
+tgt_w * (rec.bbox_norm[2] - rec.bbox_norm[0])))​
+                    by1 = max(0, int(rec.bbox_norm[1] * tgt_h - 0.25 *
+tgt_h * (rec.bbox_norm[3] - rec.bbox_norm[1])))​
+                    bx2 = min(tgt_w, int(rec.bbox_norm[2] * tgt_w +
+0.25 * tgt_w * (rec.bbox_norm[2] - rec.bbox_norm[0])))​
+                    by2 = min(tgt_h, int(rec.bbox_norm[3] * tgt_h +
+0.25 * tgt_h * (rec.bbox_norm[3] - rec.bbox_norm[1])))​
+​
+                    roi = np.array(sr_acc_mm[by1:by2, bx1:bx2, :],
+dtype=np.float32, copy=True)​
+                    pts_local = pts_dst - np.array([[bx1, by1]],
+dtype=np.float32)​
+                    M_local_512 =
+InsightFaceArcFaceONNX.umeyama_similarity_transform(pts_local,
+self.ARCFACE_SRC_512)​
+                    M_local_inv =
+cv2.invertAffineTransform(M_local_512)​
+​
+                    aligned_512 = cv2.warpAffine(roi, M_local_512,
+(512, 512), flags=cv2.INTER_CUBIC)​
+                    restored_512 =
+self.face_restorer.restore_aligned_face(​
+                        aligned_512, feather_512,
+self.cfg.codeformer_fidelity_w​
+                    )​
+​
+                    aligned_112_post = cv2.resize(restored_512, (112,
+112), interpolation=cv2.INTER_AREA)​
+                    emb_post =
+self.face_analyzer.extract_embedding_aligned(aligned_112_post)​
+                    cos_sim = float(np.dot(rec.embedding_512d,
+emb_post))​
+                    rec.post_similarity = cos_sim​
+​
+                    if cos_sim <
+self.cfg.arcface_similarity_threshold:​
+                        restored_512 =
+self.face_restorer.restore_aligned_face(aligned_512, feather_512,
+0.92)​
+                        emb_post =
+self.face_analyzer.extract_embedding_aligned(​
+                            cv2.resize(restored_512, (112, 112),
+<PARSED TEXT FOR PAGE: 40 / 64>
+interpolation=cv2.INTER_AREA)​
+                        )​
+                        cos_sim = float(np.dot(rec.embedding_512d,
+emb_post))​
+                        rec.post_similarity = cos_sim​
+​
+                    id_alpha = np.clip(​
+                        (cos_sim - self.cfg.arcface_min_threshold)​
+                        / max(self.cfg.arcface_similarity_threshold -
+self.cfg.arcface_min_threshold, 1e-4),​
+                        0.15,​
+                        1.0​
+                    )​
+                    self.logger.info(​
+                        f"[IdentityGuard] Twarz #{rec.face_id}:
+cos_sim={cos_sim:.4f}, waga akceptacji={id_alpha:.2f}"​
+                    )​
+​
+                    warped_back = cv2.warpAffine(restored_512,
+M_local_inv, (bx2 - bx1, by2 - by1), flags=cv2.INTER_CUBIC)​
+                    mask_back = cv2.warpAffine(​
+                        feather_512 * float(id_alpha), M_local_inv,
+(bx2 - bx1, by2 - by1), flags=cv2.INTER_LINEAR​
+                    )[:, :, np.newaxis]​
+​
+                    sr_acc_mm[by1:by2, bx1:bx2, :] = np.clip(​
+                        mask_back * warped_back + (1.0 - mask_back) *
+roi, 0.0, 1.0​
+                    )​
+                sr_acc_mm.flush()​
+                del sr_acc_mm​
+                self.mem_mgr.release_memory()​
+​
+            #
+------------------------------------------------------------------​
+            # ETAP 10 i 11: Fuzja częstotliwościowa (Faithful
+Restoration) i kwantyzacja 16-bit​
+            #
+------------------------------------------------------------------​
+            self.logger.info("=== [ETAP 10-11/12] Synteza pasm
+częstotliwościowych i kwantyzacja 16-bit ===")​
+            final_u16_mmap_path =
+self.mem_mgr.allocate_array("stage11_final_u16", tgt_shape, np.uint16)​
+​
+            base_mm = self.mem_mgr.open_view(base_mmap_path,
+tgt_shape, np.uint16, mode="r")​
+            low_mm = self.mem_mgr.open_view(low_freq_mmap_path,
+tgt_shape, np.uint16, mode="r")​
+<PARSED TEXT FOR PAGE: 41 / 64>
+             sr_mm = self.mem_mgr.open_view(sr_acc_mmap_path,
+tgt_shape, np.float32, mode="r")​
+             final_mm = self.mem_mgr.open_view(final_u16_mmap_path,
+tgt_shape, np.uint16, mode="r+")​
+​
+             for tc in grid_coords:​
+                 py0, py1 = max(0, tc.y0 - pad_fs), min(tgt_h, tc.y1 +
+pad_fs)​
+                 px0, px1 = max(0, tc.x0 - pad_fs), min(tgt_w, tc.x1 +
+pad_fs)​
+                 cy0, cx0 = tc.y0 - py0, tc.x0 - px0​
+​
+                 sr_padded = sr_mm[py0:py1, px0:px1, :]​
+                 sr_low_padded = cv2.GaussianBlur(sr_padded, (0, 0),
+self.cfg.freq_sep_sigma)​
+                 sr_high = (​
+                     sr_padded[cy0:cy0 + tc.height, cx0:cx0 + tc.width,
+:]​
+                     - sr_low_padded[cy0:cy0 + tc.height, cx0:cx0 +
+tc.width, :]​
+                 )​
+​
+                 f_low_base = low_mm[tc.y0:tc.y1, tc.x0:tc.x1,
+:].astype(np.float32) / 65535.0​
+                 base_orig = base_mm[tc.y0:tc.y1, tc.x0:tc.x1,
+:].astype(np.float32) / 65535.0​
+                 f_high_base = base_orig - f_low_base​
+​
+                 my0 = min(in_h - 1, int(tc.y0 * scale_y))​
+                 my1 = min(in_h, max(my0 + 1, int(math.ceil(tc.y1 *
+scale_y))))​
+                 mx0 = min(in_w - 1, int(tc.x0 * scale_x))​
+                 mx1 = min(in_w, max(mx0 + 1, int(math.ceil(tc.x1 *
+scale_x))))​
+                 tile_dof = cv2.resize(​
+                     dof_mask_low[my0:my1, mx0:mx1], (tc.width,
+tc.height), interpolation=cv2.INTER_LINEAR​
+                 )[:, :, np.newaxis]​
+​
+                 reconstructed = (​
+                     f_low_base​
+                     + tile_dof * (self.cfg.high_freq_boost * sr_high)​
+                     + (1.0 - tile_dof) * f_high_base​
+                 )​
+                 final_mm[tc.y0:tc.y1, tc.x0:tc.x1, :] = np.clip(​
+                     reconstructed * 65535.0 + 0.5, 0.0, 65535.0​
+                 ).astype(np.uint16)​
+​
+<PARSED TEXT FOR PAGE: 42 / 64>
+            final_mm.flush()​
+            del base_mm, low_mm, sr_mm, final_mm​
+            self.mem_mgr.release_memory()​
+​
+            #
+------------------------------------------------------------------​
+            # ETAP 12: Strumieniowy zapis kafelkowy do 16-bitowego
+pliku BigTIFF​
+            #
+------------------------------------------------------------------​
+            self.logger.info("=== [ETAP 12/12] Strumieniowy zapis do
+16-bitowego kontenera BigTIFF ===")​
+            output_path.parent.mkdir(parents=True, exist_ok=True)​
+
+self.bigtiff_writer.write_16bit_bigtiff(final_u16_mmap_path,
+tgt_shape, output_path)​
+​
+            metrics["elapsed_seconds"] = time.perf_counter() - t_start​
+            self.logger.info(​
+                f"Zakończono pomyślnie rekonstrukcję 400 MP w
+{metrics['elapsed_seconds']:.2f} s -> {output_path}"​
+            )​
+            return metrics​
+​
+        finally:​
+            self.mem_mgr.cleanup()​
+​
+​
+#
+======================================================================
+========​
+# 4. WARSTWA PREZENTACJI: SAMODZIELNY INTERFEJS CLI DO PRZETWARZANIA
+WSADOWEGO​
+#
+======================================================================
+========​
+​
+def build_cli_parser() -> argparse.ArgumentParser:​
+    parser = argparse.ArgumentParser(​
+        description="Samodzielny silnik CLI do rekonstrukcji
+fotografii 400 MP (BigTIFF, RL-TV, ArcFace, CodeFormer)."​
+    )​
+    parser.add_argument("-i", "--input", type=Path, required=True,
+help="Ścieżka do pliku wejściowego lub katalogu (tryb wsadowy).")​
+    parser.add_argument("-o", "--output", type=Path, required=True,
+help="Ścieżka do wyjściowego pliku .tif lub katalogu.")​
+    parser.add_argument("--megapixels", type=float, default=400.0,
+help="Docelowa rozdzielczość w megapikselach (domyślnie: 400.0).")​
+<PARSED TEXT FOR PAGE: 43 / 64>
+    parser.add_argument("--tile-size", type=int, default=1024,
+help="Rozmiar kafelka przetwarzania (domyślnie: 1024).")​
+    parser.add_argument("--overlap", type=int, default=256,
+help="Szerokość zakładki Gaussa w pikselach (domyślnie: 256).")​
+    parser.add_argument("--rl-iterations", type=int, default=12,
+help="Liczba iteracji dekonwolucji Richardsona-Lucy'ego (domyślnie:
+12).")​
+    parser.add_argument("--codeformer-w", type=float, default=0.75,
+help="Waga wierności CodeFormer [0.0 - 1.0] (domyślnie: 0.75).")​
+    parser.add_argument("--id-threshold", type=float, default=0.78,
+help="Próg podobieństwa cosinusowego ArcFace R100 (domyślnie: 0.78).")​
+    parser.add_argument("--sr-model", type=Path, default=None,
+help="Opcjonalna ścieżka do modelu SR (.onnx / .pt).")​
+    parser.add_argument("--arcface-model", type=Path, default=None,
+help="Opcjonalna ścieżka do modelu ONNX ArcFace R100
+(glintr100.onnx).")​
+    parser.add_argument("--codeformer-model", type=Path, default=None,
+help="Opcjonalna ścieżka do modelu ONNX CodeFormer.")​
+    parser.add_argument("--depth-model", type=Path, default=None,
+help="Opcjonalna ścieżka do modelu ONNX DepthAnything.")​
+    parser.add_argument("--swap-dir", type=Path,
+default=Path(tempfile.gettempdir()) / "s24u_400mp_swap", help="Katalog
+wymiany UFS 4.0 dla memmap.")​
+    return parser​
+​
+​
+def main_cli(argv: Optional[List[str]] = None) -> int:​
+    parser = build_cli_parser()​
+    args = parser.parse_args(argv)​
+​
+    logging.basicConfig(​
+        level=logging.INFO,​
+        format="%(asctime)s | %(levelname)-7s | %(message)s",​
+        datefmt="%Y-%m-%d %H:%M:%S"​
+    )​
+    logger = logging.getLogger("S24U_400MP_CLI")​
+​
+    opt_cfg = OpticalPSFConfig(rl_iterations=args.rl_iterations)​
+    pipe_cfg = PipelineConfig(​
+        target_megapixels=args.megapixels,​
+        tile_size=args.tile_size,​
+        tile_overlap=args.overlap,​
+        codeformer_fidelity_w=args.codeformer_w,​
+        arcface_similarity_threshold=args.id_threshold,​
+        work_dir=args.swap_dir,​
+        optical=opt_cfg​
+    )​
+​
+<PARSED TEXT FOR PAGE: 44 / 64>
+    sr_engine = ResNetSRTileEngine(args.sr_model, pipe_cfg.device,
+pipe_cfg.use_fp16_inference, logger)​
+    face_analyzer = InsightFaceArcFaceONNX(args.arcface_model, None,
+logger)​
+    face_restorer =
+CodeFormerControlNetInpainter(args.codeformer_model, logger)​
+    dof_gen = DepthBokehMaskGenerator(​
+         args.depth_model, pipe_cfg.dof_depth_threshold,
+pipe_cfg.dof_sharpness_threshold, logger​
+    )​
+​
+    orchestrator = Reconstruction12StageOrchestrator(​
+         config=pipe_cfg,​
+         sr_engine=sr_engine,​
+         face_analyzer=face_analyzer,​
+         face_restorer=face_restorer,​
+         dof_generator=dof_gen,​
+         logger=logger​
+    )​
+​
+    valid_exts = {".tif", ".tiff", ".png", ".jpg", ".jpeg", ".webp",
+".bmp"}​
+    if args.input.is_dir():​
+         input_files = sorted([p for p in args.input.iterdir() if
+p.suffix.lower() in valid_exts])​
+         args.output.mkdir(parents=True, exist_ok=True)​
+         for img_path in input_files:​
+             out_file = args.output /
+f"{img_path.stem}_400MP_16bit.tif"​
+             orchestrator.execute_pipeline(img_path, out_file)​
+    else:​
+         out_file = args.output if args.output.suffix.lower() in
+{".tif", ".tiff"} else args.output /
+f"{args.input.stem}_400MP_16bit.tif"​
+         orchestrator.execute_pipeline(args.input, out_file)​
+​
+    return 0​
+​
+​
+if __name__ == "__main__":​
+    sys.exit(main_cli())​
+
+
+
+Architektura Węzłów ComfyUI pod Rekonstrukcję 400
+MP na Samsungu S24 Ultra
+Każdy przepływ pracy w środowisku ComfyUI stanowi skierowany graf acykliczny (DAG)
+<PARSED TEXT FOR PAGE: 45 / 64>
+zapisany w ustrukturyzowanym pliku JSON, który definiuje pełny potok generacji: od
+załadowania wag modelu, przez warunkowanie tekstowe i strukturalne, aż po próbkowanie w
+przestrzeni ukrytej. Uruchomienie tego środowiska na platformie Samsung Galaxy S24 Ultra (w
+kontenerze Linux proot-distro / Termux z akceleracją Vulkan/OpenCL lub jako lokalny serwer
+wykonawczy podlegający zunifikowanemu limitowi 12 GB LPDDR5X) wymaga całkowitego
+wyeliminowania pełnowymiarowego dekodowania przestrzeni ukrytej (Latent Space).
+Standardowy węzeł dekodera VAE przy próbie jednorazowego przetworzenia tensora
+latentnego odpowiadającego rozdzielczości 20000 \times 20000 pikseli (wymiar latentny 2500
+\times 2500 \times 4) alokuje w warstwach pośrednich splotu ponad 38\text{ GB} pamięci, co
+natychmiast przekracza dostępną pulę LPDDR5X.
+Zaprojektowana architektura węzłów eliminuje to ograniczenie poprzez ścisłe rozdzielenie grafu
+na cztery współpracujące podsystemy funkcjonalne. Pierwszym z nich jest gałąź maskowania
+głębi ostrości i ochrony bokeh, w której węzeł DepthAnythingPreprocessor
+(depth_anything_vitl14.pth) wyznacza z obrazu wejściowego mapę głębi, przekształcaną
+następnie przez węzły ImageToMask oraz FeatherMask w gładką maskę selektywności
+przestrzennej. Maska ta steruje finalnym węzłem kompozycji ImageCompositeMasked,
+gwarantując, że rozmyte tło (bokeh) całkowicie omija syntezę wysokich częstotliwości i
+zachowuje naturalną gładkość optyczną.
+Drugim podsystemem jest gałąź rekonstrukcji twarzy łącząca ControlNet Inpaint, słownikowy
+model CodeFormer oraz strażnika tożsamości InsightFace (ArcFace). Przed globalnym
+skalowaniem kafelkowym detektor UltralyticsDetectorProvider (bbox/face_yolov8m.pt)
+wyodrębnia regiony twarzy, które węzeł FaceDetailer poddaje lokalnemu inpaintingowi
+dyfuzyjnemu pod kontrolą modelu control_v11p_sd15_inpaint.pth (aplikowanego przez
+ControlNetApplyAdvanced z siłą 0.70). Wyjście trafia do węzła FaceRestoreCFWithModel
+(codeformer.pth, waga wierności w = 0.75), a następnie do węzła weryfikacji i utrzymania
+tożsamości ReActorFaceSwap
+(inswapper_128.o[span_144](start_span)[span_144](end_span)nnx z ekstrakcją wektorową
+ArcFace), co zapobiega dryfowi geometrycznemu rysów twarzy.
+Trzeci podsystem realizuje kaskadowy upscaling z wykorzystaniem Tiled Diffusion
+(UltimateSDUpscale) oraz ControlNet Tile. Obraz po korekcji twarzy jest wiązany z warunkiem
+strukturalnym control_v11f1e_sd15_tile.pth (strength = 0.85), a następnie przechodzi
+dwustopniowe skalowanie kafelkowe (2\times do 100 MP w węźle 19 oraz kolejne 2\times do
+400 MP w węźle 20) przy użyciu modelu 4x-UltraSharp.pth (UpscaleModelLoader).
+Przetwarzanie odbywa się w kafelkach 1024 \times 1024 z zakładką 128–256 pikseli, niskim
+odszumianiem (denoise = 0.22 w pierwszym kroku i 0.16 w drugim) oraz kafelkowym
+dekoderem VAE (vae-ft-mse-840000-ema-pruned.safetensors), dzięki czemu szczytowe użycie
+pamięci na układzie Adreno 750 nigdy nie przekracza bezpiecznego progu.
+Czwarty podsystem odpowiada za separację częstotliwościową (Wavelet Frequency
+Separation) zapewniającą Faithful Restoration. Równolegle do kaskady dyfuzyjnej węzeł
+ImageScaleBy skaluje obraz bazowy czterokrotnie filtrem Lanczos, a para węzłów ImageBlur (o
+promieniu
+15\[span_116](start_span)[span_116](end_span)[span_119](start_span)[span_119](end_span)te
+xt{ px} i \sigma = 7.5) wyodrębnia pasma niskoczęstotliwościowe zarówno z obrazu
+referencyjnego (f_L^{\text{orig}}), jak i z wyjścia kaskady dyfuzyjnej (f_L^{\text{SR}}). Węzeł
+ImageBlend w trybie odejmowania (subtract) izoluje czysty detal wysokoczęstotliwościowy
+f_H^{\text{SR}} = \hat{I}_{\text{SR}} - f_L^{\text{SR}}, który kolejny węzeł ImageBlend (add)
+dodaje bezpośrednio do nienaruszonej bazy barwnej oryginału f_L^{\text{orig}}, eliminując
+jakiekolwiek przekłamania kolorystyczne przed finalnym nałożeniem maski bokeh i zapisem w
+<PARSED TEXT FOR PAGE: 46 / 64>
+węźle SaveImage.
+
+Specyfikacja Węzłów Grafu ComfyUI i Mapowanie Parametrów
+ID Węzła           Klasa Węzła         Rola w potoku 400 Kluczowe             Połączenia
+                   (class_type)        MP                 parametry           wejściowe
+                                                          (widgets_values) (Źródłowe ID)
+1                  LoadImage           Wczytanie obrazu ["input_deconvolve Brak (Źródło
+                                       po dekonwolucji d_linear.tif",         danych)
+                                       RL-TV              "image"]
+2                  CheckpointLoader Model bazowy          ["realisticVisionV6 Brak
+                   Simple              fotorealistyczny   0B1_v51VAE.safet
+                                       (FP16)             ensors"]
+3                  VAELoader           Dedykowany         ["vae-ft-mse-8400 Brak
+                                       dekoder VAE        00-ema-pruned.saf
+                                                          etensors"]
+4                  CLIPTextEncode Prompt pozytywny ["ultra high               clip \leftarrow
+                                       (mikrotekstura)    resolution, 8k raw Node 2
+                                                          photo, natural skin
+                                                          pores, sharp
+                                                          optical
+                                                          micro-contrast"]
+5                  CLIPTextEnco[spa Prompt negatywny ["cgi, plastic skin, clip \leftarrow
+                   n_180](start_span) (ochrona przed      oversharpened,      Node 2
+                   [span_180](end_s artefaktami)          halo, chromatic
+                   pan)de                                 aberration, bokeh
+                                                          artifacts,
+                                                          deformed"]
+6                  ControlNetLo[span Ładowanie            ["control_v11f1e_s Brak
+                   _181](start_span)[ ControlNet Tile     d15_tile.pth"]
+                   span_181](end_sp
+                   an)ader
+7                  ControlNetLoader Ładowanie             ["control_v11p_sd1 Brak
+                                       ControlNet Inpaint 5_inpaint.pth"]
+                                       (twarze)
+8                  UpscaleModelLoa Ładowanie modelu ["4x-UltraSharp.pt Brak
+                   der                 SR 4x              h"]
+9                  DepthAnythingPre Generacja mapy ["depth_anything_ image \leftarrow
+                   processor           głębi (Bokeh       vitl14.pth", 1024] Node 1
+                                       Shield)
+10                 ImageToMask         Konwersja mapy ["red"]                 image \leftarrow
+                                       głębi na maskę                         Node 9
+                                       ostrości
+11                 FeatherMask         Zmiękczenie        [16, 16, 16, 16]    mask \leftarrow
+                                       krawędzi maski                         Node 10
+                                       głębi ostrości
+12                 UltralyticsDetector Detektor twarzy    ["bbox/face_yolov8 Brak
+<PARSED TEXT FOR PAGE: 47 / 64>
+ID Węzła   Klasa Węzła       Rola w potoku 400 Kluczowe               Połączenia
+           (class_type)      MP                  parametry            wejściowe
+                                                 (widgets_values) (Źródłowe ID)
+           Provider          YOLOv8m             m.pt"]
+13         ControlNetApplyA Aplikacja            [0.70, 0.0,          positive \leftarrow
+           dvanced           ControlNet Inpaint 0.[span_112](start 4, negative
+                             dla twarzy          _span)[span_112]( \leftarrow 5,
+                                                 end_span)85]         control_net
+                                                                      \leftarrow 7, image
+                                                                      \leftarrow 1
+14         FaceDetailer      Rekonstrukcja       [512, true, 768, 42, image \leftarrow 1,
+                             detalu twarzy z     "randomize", 20, model \leftarrow 2,
+                             Inpaintem           5.5,                 clip \leftarrow 2,
+                                                 "dpmpp_2m_sde", vae \leftarrow 3,
+                                                 "karras",            positive \leftarrow
+                                                 0.28,[span_166](st 13, negative
+                                                 art_span)[span_16 \leftarrow 13,
+                                                 6](end_span) 5,      bbox_detector
+                                                 true, true, 0.5, 10, \leftarrow 12
+                                                 3.0, "center-1", 0,
+                                                 0.93, 0, 0.7,
+                                                 "False", 10, "", 1,
+                                                 false, 20]
+15         FaceRestoreModel Ładowanie modelu ["codeformer.pth"] Brak
+           Loader            CodeFormer
+16         FaceRestoreCFWi Restauracja           [0.75] (waga         facerestore_model
+           thModel           słownikowa          wierności w=0.75) \leftarrow 15,
+                             CodeFormer                               image \leftarrow
+                                                                      14
+17         ReActorFaceSwap Weryfikacja i         [true,               input_image
+                             korekta             "inswapper_128.o \leftarrow 16,
+                             tożsamości          nnx",                source_image
+                             ArcFace             "reti[span_145](sta \leftarrow 1
+                                                 rt_span)[span_145
+                                                 ](end_span)naface
+                                                 _resnet50",
+                                                 "codeformer.pth",
+                                                 0.85, 0.78,
+                                                 "female", "female",
+                                                 "0", "0", 1]
+18         ControlNetApply[s Aplikacja           [0.85, 0.0, 0.95]    positive \leftarrow
+           pan_146](start_sp ControlNet Tile dla                      4, negative
+           an)[span_146](end 400 MP                                   \leftarrow 5,
+           _span)Advanced                                             control_net
+                                                                      \leftarrow 6, image
+                                                                      \leftarrow 17
+19         UltimateSDUpscal Kaskada 1:           [2.0, 42,            image \leftarrow
+<PARSED TEXT FOR PAGE: 48 / 64>
+ID Węzła   Klasa Węzła      Rola w potoku 400 Kluczowe                Połączenia
+           (class_type)     MP                   parametry            wejściowe
+                                                 (widgets_values) (Źródłowe ID)
+           e                Skalowanie           "randomize", 18, 17, model
+                            kafelkowe do 100 5.0,                     \leftarrow 2,
+                            MP                   "dpmpp_2m_sde", positive \leftarrow
+                                                 "karras", 0.22,      18, negative
+                                                 "Li[span_168](start \leftarrow 18, vae
+                                                 _span)[span_168]( \leftarrow 3,
+                                                 end_span)near", upscale_model
+                                                 1024, 1024, 8,       \leftarrow 8
+                                                 128, "Half Tile",
+                                                 0.15, 512, 64, true,
+                                                 false]
+20         UltimateSDUpscal Kaskada 2:           [2.0, 108,           image \leftarrow
+           e                Skalowanie           "randomize", 14, 19, model
+                            kafelkowe do 400 4.5, "dpmpp_2m", \leftarrow 2,
+                            MP                   "karras", 0.16,      positive \leftarrow
+                                                 "Chess[span_169] 18, negative
+                                                 (start_span)[span_ \leftarrow 18, vae
+                                                 169](end_span)", \leftarrow 3,
+                                                 1024, 1024, 16,      upscale_model
+                                                 256, "Half Tile + \leftarrow 8
+                                                 Intersections",
+                                                 0.12, 512, 128,
+                                                 true, false]
+21         ImageScaleBy     Skalowanie           ["lanczos", 4.0]     image \leftarrow
+                            referencyjnej bazy                        17
+                            barwnej 4x
+22         ImageBlur        Ekstrakcja pasma [15, 7.5]                image \leftarrow
+                            niskiego f_L                              21
+                            oryginału
+23         ImageBlur        Ekstrakcja pasma [15, 7.5]                image \leftarrow
+                            niskiego z wyjścia                        20
+                            SR
+24         ImageBlend       Izolacja wysokich [1.0, "subtract"]       image1 \leftarrow
+                            częstotliwości                            20, image2
+                            f_H^{\text{SR}}                           \leftarrow 23
+25         ImageBlend       Synteza Faithful [1.0, "add"]             image1 \leftarrow
+                            Restoration                               22, image2
+                            (f_L^{\text{orig}} +                      \leftarrow 24
+                            f_H^{\text{SR}})
+26         ImageCompositeM Ochrona Bokeh         [0, 0, true]         destination
+           asked            (fuzja z maską                            \leftarrow 21,
+                            głębi ostrości)                           source \leftarrow
+                                                                      25, mask \leftarrow
+                                                                      11
