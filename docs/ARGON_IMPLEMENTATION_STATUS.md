@@ -34,3 +34,21 @@ Wszystkie 12 etapów i 10 wymagań przekrojowych pozostają obowiązującą spec
 Renderer `mobile_s24.s24_render` używa bezpośrednio funkcji `aether.core.optical.correct_lca` oraz `aether.core.optical.richardson_lucy_tv` podczas przetwarzania kafelków, gdy parametry optyczne są włączone. Przed RL stosuje odbity margines odpowiadający promieniowi PSF i liczbie iteracji, co ogranicza artefakty od sztucznego zerowego brzegu. Test integracyjny sprawdza wykonanie obu funkcji i wynikowy BigTIFF.
 
 Potwierdzenie lokalne: **33/33 testy** (Python, Linux, syntetyczne małe obrazy), `compileall` oraz `aether plan --width 6000 --height 4000 --target-mp 400`. Nie jest to jeszcze test fizycznego S24 Ultra, pełnego obrazu 400 MP ani rzeczywistych wag ONNX/GPU. Model PSF w CLI jest nadal gaussowski; API skalibrowanych/wyższych wielomianów pozostaje do połączenia z konfiguracją renderera.
+
+
+## Przyrost: ICC16 / S24 hardware acceptance / bezpieczne transakcje ComfyUI
+
+Stan 2026-10-24; odniesienia do świeżych zmian w `main`.
+
+| Obszar | Kod | Zweryfikowano | Nadal nie wykonano |
+|---|---|---|---|
+| Kolor i wejście RGB16 | `src/aether/ingest/icc16.py`, `src/aether/ingest/cli.py` | LittleCMS2 16bit, niejawne RGB8 zabronione, lokalny mały BigTIFF i 4 testy | Pełne RAW/DNG, sRGB/non-sRGB real camera profiles, instalacja LittleCMS2 w Termux na S24 |
+| Integracja ICC → lokalny render | `aether-ingest --normalized ... --render ...` | lokalny syntetyczny E2E: RGB16 TIFF → RGB16 BigTIFF | Rzeczywisty plik 200 MP i pełny 400 MP na telefonie |
+| Pomiary sprzętu | `src/aether/mobile/device_acceptance.py`, `aether-device-test` | mały BigTIFF, zapis raportu RSS/dysk/czas i 3 testy | Faktyczne temperatury i przeżycie Android LMK; fizyczny S24 |
+| Zewnętrzne kafelki | `src/aether/remote/transaction.py` | 5 testów lokalnych: TLS, trwały SHA, znane ID zadania, bezpieczne wznowienia, błąd PNG | Konkretny worker ComfyUI, upload, sprawdzenie realnej inferencji i pełna kaskada E2E |
+
+Testy rozwojowe wymienione w tabeli dotyczą **odrębnego, lokalnego zestawu 12 syntetycznych testów**, uruchomionego na Linuksie z istniejącym mobilnym rendererem. Wynik pełnego CI aktualnego repozytorium po ostatnich commitach nie jest potwierdzony. Brak pola temperatury jest zapisywany jako `null`, nie zastępowany zmyśloną wartością.
+
+**Pozostałe blokery produkcyjne nie są zamknięte:** strumieniowe RAW/DNG i kalibracja koloru, rzeczywista integracja modeli Depth Anything/ArcFace/CodeFormer/ControlNet, zdalny ComfyUI GPU E2E, profilowanie i pełny 400 MP render na fizycznym Samsung S24 Ultra.
+
+Żaden z 12 etapów nie otrzymuje pełnej akceptacji bez wymaganych dowodów.
