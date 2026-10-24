@@ -543,7 +543,10 @@ def run(cfg: MobileConfig) -> dict[str, Any]:
         if cfg.sr_candidate is not None:
             if not cfg.sr_candidate.is_file():
                 raise FileNotFoundError(cfg.sr_candidate)
-            sr_source = Source(cfg.sr_candidate, cfg.max_input_pixels,per_decode_budget)
+            # Uncompressed/memmappable RGB TIFF is read by ROI: allow a 400MP
+            # target-sized SR candidate while keeping compressed inputs capped.
+            sr_limit = max(cfg.max_input_pixels, tw*th) if cfg.sr_candidate.suffix.lower() in ('.tif','.tiff') else cfg.max_input_pixels
+            sr_source = Source(cfg.sr_candidate, sr_limit, per_decode_budget)
             if ((sr_source.width,sr_source.height) != (source.width,source.height) and
                 (sr_source.width,sr_source.height) != (tw,th)):
                 raise ValueError('SR candidate must match source or output dimensions')
