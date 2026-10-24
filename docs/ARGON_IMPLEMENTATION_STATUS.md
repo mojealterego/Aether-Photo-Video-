@@ -28,3 +28,9 @@ Wszystkie 12 etapów i 10 wymagań przekrojowych pozostają obowiązującą spec
 6. Próby na **fizycznym S24 Ultra**: wykonanie 400 MP, szczytowy RSS, presja LMK, temperatura, przerwania, miejsce w UFS i weryfikacja BigTIFF.
 
 **Nie jest potwierdzone**, że GPU/NPU S24 wykonuje SDXL/ComfyUI; podstawowy renderer pozostaje lokalny i bez modeli.
+
+## Integracja optyki z rendererem (2026-10-24)
+
+Renderer `mobile_s24.s24_render` używa bezpośrednio funkcji `aether.core.optical.correct_lca` oraz `aether.core.optical.richardson_lucy_tv` podczas przetwarzania kafelków, gdy parametry optyczne są włączone. Przed RL stosuje odbity margines odpowiadający promieniowi PSF i liczbie iteracji, co ogranicza artefakty od sztucznego zerowego brzegu. Test integracyjny sprawdza wykonanie obu funkcji i wynikowy BigTIFF.
+
+Potwierdzenie lokalne: **33/33 testy** (Python, Linux, syntetyczne małe obrazy), `compileall` oraz `aether plan --width 6000 --height 4000 --target-mp 400`. Nie jest to jeszcze test fizycznego S24 Ultra, pełnego obrazu 400 MP ani rzeczywistych wag ONNX/GPU. Model PSF w CLI jest nadal gaussowski; API skalibrowanych/wyższych wielomianów pozostaje do połączenia z konfiguracją renderera.
