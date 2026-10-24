@@ -46,6 +46,7 @@ class MobileConfig:
     tile_size: int = 256
     detail_gain: float = 0.0
     psf_sigma: float = 0.0
+    psf_kernel: Path | None = None
     rl_iterations: int = 0
     ca_red: float = 0.0
     ca_blue: float = 0.0
@@ -67,7 +68,7 @@ class MobileConfig:
     compression: str = "none"
 
     def __post_init__(self) -> None:
-        for name in ('source', 'output', 'stage_dir', 'focus_mask', 'inpainted_base', 'sr_candidate', 'inpaint_mask', 'protected_mask'):
+        for name in ('source', 'output', 'stage_dir', 'focus_mask', 'psf_kernel', 'inpainted_base', 'sr_candidate', 'inpaint_mask', 'protected_mask'):
             value = getattr(self, name)
             if value is not None:
                 object.__setattr__(self, name, Path(value).expanduser())
@@ -101,6 +102,11 @@ class MobileConfig:
         if (not math.isfinite(self.psf_sigma) or self.psf_sigma < 0 or self.psf_sigma > 3
                 or self.rl_iterations < 0 or self.rl_iterations > 12):
             raise ValueError('Optics: sigma 0..3 and iterations 0..12 required')
+        if self.psf_kernel is not None:
+            if self.psf_kernel.suffix.lower() != '.npy' or self.rl_iterations < 1:
+                raise ValueError('Measured PSF must be an .npy file with nonzero RL iterations')
+            if self.psf_sigma > 0:
+                raise ValueError('Measured PSF and Gaussian psf_sigma are mutually exclusive')
         if any(not math.isfinite(v) or abs(v)>0.002 for v in (self.ca_red, self.ca_blue)):
             raise ValueError('CA radial coefficients outside mobile safety limit +/-0.002')
         if self.max_input_pixels < 1 or self.max_input_pixels > 225_000_000 or self.max_decoded_ram_mb < 1:
@@ -224,7 +230,14 @@ def _resample_linear(source: Source, ext: tuple[int, int, int, int],
     sx, sy = source.width / width, source.height / height
     l, t, r, b = x0 * sx, y0 * sy, x1 * sx, y1 * sy
     # 3-lobe Lanczos + margin for downsampling; source boundaries are clamped.
-    optical_support = math.ceil(config.psf_sigma * 3) * config.rl_iterations
+    if config.psf_kernel is not None:
+        from aether.core.psf_calibration import validate_psf
+        measured_psf = validate_psf(np.load(config.psf_kernel, allow_pickle=False))
+        optical_radius = measured_psf.shape[0] // 2
+    else:
+        measured_psf = None
+        optical_radius = math.ceil(config.psf_sigma * 3)
+    optical_support = optical_radius * config.rl_iterations
     max_ca_dist = max(abs(config.ca_red), abs(config.ca_blue)) * math.hypot(source.width, source.height)/2
     margin = max(8, math.ceil(4 * max(sx, sy)) + 2) + optical_support + math.ceil(max_ca_dist)
     bx0 = max(0, math.floor(l) - margin)
@@ -243,10 +256,11 @@ def _resample_linear(source: Source, ext: tuple[int, int, int, int],
                             full_wh=(source.width, source.height),
                             red=LCAChannel(radial=(config.ca_red,0.,0.,0.)),
                             blue=LCAChannel(radial=(config.ca_blue,0.,0.,0.)))
-    if config.rl_iterations and config.psf_sigma:
+    if config.rl_iterations and (config.psf_sigma or measured_psf is not None):
         from aether.core.optical import anisotropic_gaussian_psf, richardson_lucy_tv
-        radius = max(1, math.ceil(config.psf_sigma*3))
-        psf = anisotropic_gaussian_psf(config.psf_sigma, config.psf_sigma, 0., radius=radius)
+        radius = max(1, optical_radius)
+        psf = (measured_psf if measured_psf is not None
+               else anisotropic_gaussian_psf(config.psf_sigma, config.psf_sigma, 0., radius=radius))
         padding = radius * config.rl_iterations
         # Reflect-extended optical halo prevents zero-boundary RL from pulling
         # artificial edge intensity into the central working tile.
@@ -436,7 +450,9 @@ def _file_signature(cfg: MobileConfig, tw: int, th: int) -> str:
               'inpaint_strength': cfg.inpaint_strength, 'lab_color_match': cfg.lab_color_match,
               'width': tw, 'height': th, 'tile_size': cfg.tile_size,
               'detail_gain': cfg.detail_gain, 'transfer': cfg.input_transfer,
-              'psf_sigma': cfg.psf_sigma, 'rl_iterations': cfg.rl_iterations,
+              'psf_sigma': cfg.psf_sigma,
+              'psf_kernel_sha256': _fingerprint(cfg.psf_kernel) if cfg.psf_kernel else None,
+              'rl_iterations': cfg.rl_iterations,
               'ca_red': cfg.ca_red, 'ca_blue': cfg.ca_blue,
               'contiguous_output':cfg.contiguous_output, 'compression':cfg.compression,
               'program': 'photo400-s24-2.3-cascade'}
@@ -663,6 +679,7 @@ def main() -> int:
     p.add_argument('--tile',type=int,default=256)
     p.add_argument('--detail-gain',type=float,default=0.0)
     p.add_argument('--psf-sigma',type=float,default=0.0)
+    p.add_argument('--psf-kernel',type=Path,help='Measured normalized odd kernel .npy')
     p.add_argument('--rl-iterations',type=int,default=0)
     p.add_argument('--ca-red',type=float,default=0.0)
     p.add_argument('--ca-blue',type=float,default=0.0)
@@ -687,7 +704,8 @@ def main() -> int:
     cfg=MobileConfig(args.input,args.output,args.workdir,
                      target_width=args.width,target_height=args.height,
                      target_mp=args.target_mp,tile_size=args.tile,detail_gain=args.detail_gain,
-                     psf_sigma=args.psf_sigma,rl_iterations=args.rl_iterations,
+                     psf_sigma=args.psf_sigma,psf_kernel=args.psf_kernel,
+                     rl_iterations=args.rl_iterations,
                      ca_red=args.ca_red,ca_blue=args.ca_blue,
                      focus_mask=args.focus_mask,inpainted_base=args.inpainted_base,
                      sr_candidate=args.sr_candidate,wavelet_levels=args.wavelet_levels,
