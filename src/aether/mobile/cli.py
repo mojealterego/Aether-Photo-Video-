@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     restore.add_argument('--detail-gain', type=float, default=0.0)
     restore.add_argument('--compression', choices=['none','deflate'], default='none')
     restore.add_argument('--psf-sigma', type=float, default=0.0)
+    restore.add_argument('--psf-kernel', type=Path, help='Measured .npy kernel used instead of Gaussian')
     restore.add_argument('--rl-iterations', type=int, default=0)
     restore.add_argument('--ca-red', type=float, default=0.0)
     restore.add_argument('--ca-blue', type=float, default=0.0)
@@ -49,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     auto.add_argument('--tile', type=int, default=256)
     auto.add_argument('--detail-gain', type=float, default=0.0)
     auto.add_argument('--psf-sigma', type=float, default=0.0)
+    auto.add_argument('--psf-kernel', type=Path, help='Measured .npy kernel used instead of Gaussian')
     auto.add_argument('--rl-iterations', type=int, default=0)
     auto.add_argument('--ca-red', type=float, default=0.0)
     auto.add_argument('--ca-blue', type=float, default=0.0)
@@ -60,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
         result = run_offline_auto(cfg, output=args.output,
             target_width=args.width, target_height=args.height,
             target_mp=args.target_mp, tile=args.tile, detail_gain=args.detail_gain,
-            psf_sigma=args.psf_sigma, rl_iterations=args.rl_iterations,
+            psf_sigma=args.psf_sigma, psf_kernel=args.psf_kernel,
+            rl_iterations=args.rl_iterations,
             ca_red=args.ca_red, ca_blue=args.ca_blue,
             reserve_gb=args.reserve_free_gb)
         print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -72,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
                                target_width=args.width, target_height=args.height,
                                target_mp=args.target_mp, tile_size=args.tile,
                                detail_gain=args.detail_gain, psf_sigma=args.psf_sigma,
-                               rl_iterations=args.rl_iterations, ca_red=args.ca_red,
+                               psf_kernel=args.psf_kernel, rl_iterations=args.rl_iterations, ca_red=args.ca_red,
                                ca_blue=args.ca_blue, focus_mask=args.focus_mask,
                                inpainted_base=args.inpainted_base, inpaint_mask=args.inpaint_mask,
                                sr_candidate=args.sr_candidate, wavelet_levels=args.wavelet_levels,
