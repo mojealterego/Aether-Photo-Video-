@@ -226,10 +226,22 @@ def _resample_linear(source: Source, ext: tuple[int, int, int, int],
         patch = _to_linear(patch)
     # Pre-SR optical stage in float32, with a global source-space coordinate system.
     if config.ca_red != 0.0 or config.ca_blue != 0.0:
-        patch = _radial_ca_source(patch, bx0, by0, source.width, source.height,
-                                  config.ca_red, config.ca_blue)
+        from aether.core.optical import correct_lca, LCAChannel
+        patch = correct_lca(patch, origin_xy=(bx0,by0),
+                            full_wh=(source.width, source.height),
+                            red=LCAChannel(radial=(config.ca_red,0.,0.,0.)),
+                            blue=LCAChannel(radial=(config.ca_blue,0.,0.,0.)))
     if config.rl_iterations and config.psf_sigma:
-        restored = _rl_gaussian(patch, config.psf_sigma, config.rl_iterations)
+        from aether.core.optical import anisotropic_gaussian_psf, richardson_lucy_tv
+        radius = max(1, math.ceil(config.psf_sigma*3))
+        psf = anisotropic_gaussian_psf(config.psf_sigma, config.psf_sigma, 0., radius=radius)
+        padding = radius * config.rl_iterations
+        # Reflect-extended optical halo prevents zero-boundary RL from pulling
+        # artificial edge intensity into the central working tile.
+        extended = np.pad(patch, ((padding,padding),(padding,padding),(0,0)), mode='reflect')
+        filtered = richardson_lucy_tv(extended, psf, iterations=config.rl_iterations,
+                                      tv_weight=0.001)
+        restored = filtered[padding:-padding, padding:-padding]
         if focus_image is not None:
             fm = _focus_source_roi(focus_image, (bx0,by0,bx1,by1), (source.height,source.width))
             patch = patch + fm[:,:,None]*(restored - patch)
