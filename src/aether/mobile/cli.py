@@ -31,6 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     restore.add_argument('--focus-mask', type=Path)
     restore.add_argument('--inpainted-base', type=Path)
     restore.add_argument('--inpaint-mask', type=Path)
+    restore.add_argument('--sr-candidate', type=Path, help='Optional registered neural SR hypothesis (RGB TIFF/PNG)')
+    restore.add_argument('--wavelet-levels', type=int, default=3)
+    restore.add_argument('--wavelet-gain', type=float, default=1.0)
     restore.add_argument('--protected-mask', type=Path)
     restore.add_argument('--reserve-free-gb', type=float, default=1.0)
     restore.add_argument('--keep-stage', action='store_true')
@@ -45,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
                                rl_iterations=args.rl_iterations, ca_red=args.ca_red,
                                ca_blue=args.ca_blue, focus_mask=args.focus_mask,
                                inpainted_base=args.inpainted_base, inpaint_mask=args.inpaint_mask,
+                               sr_candidate=args.sr_candidate, wavelet_levels=args.wavelet_levels,
+                               wavelet_gain=args.wavelet_gain,
                                protected_mask=args.protected_mask, reserve_free_gb=args.reserve_free_gb,
                                keep_stage=args.keep_stage)
         except ValueError as exc:
