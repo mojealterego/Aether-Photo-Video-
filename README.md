@@ -49,3 +49,41 @@ Project source license and licenses for external neural checkpoints are independ
 ## Imported research requirements
 
 The full 64-page Argon-supplied 400 MP research transcription is archived in [source-material](docs/source-material/). All technical requests are tracked, without silent omission, in [ARGON-400MP requirements](docs/requirements/ARGON-400MP.md). The original PDF remains the fidelity reference for formulas and figures. New code is tested separately; archival text is not automatically runnable.
+
+
+## Samsung S24 Ultra — obecny offline renderer
+
+Po instalacji `pip install -e ".[mobile,optical]"` można wykonywać lokalną rekonstrukcję RGB16 BigTIFF bez CUDA i bez uruchomionego ComfyUI. Parametry i liczbę kafelków sprawdza `aether plan`.
+
+### Fuzja rzeczywistej hierarchii Haar DWT z kandydatem SR
+
+```bash
+aether restore \
+  --source ./photo.png --output ./result-400mp.tif \
+  --workdir ./work --target-mp 400 --tile 256 \
+  --focus-mask ./focus-L.png \
+  --sr-candidate ./sr-candidate-rgb16.tif \
+  --wavelet-levels 3 --wavelet-gain 1.0 \
+  --compression deflate
+```
+
+`sr-candidate` musi być przestrzennie zarejestrowany względem źródła albo rozmiaru docelowego. Dla rzeczywistego obrazu 400 MP ma to być **nieskompresowany, mapowalny RGB TIFF**; renderer pobiera tylko wycinki. Opcjonalny `--compression deflate` dotyczy **końcowego BigTIFF**; pośredni `--contiguous-output` pozostaje nieskompresowany i mapowalny. Wygenerowane szczegóły nie stanowią dowodu autentycznego odzyskania danych.
+
+### Opcjonalna mapa ostrości z Depth Anything ONNX
+
+Dla wcześniej przygotowanego podglądu RGB8 o rozdzielczości co najwyżej 1 MP i kompatybilnego pliku ONNX:
+
+```bash
+aether-depth \
+  --preview ./preview-small-rgb.png \
+  --model ./depth-anything-compatible.onnx \
+  --focus-depth 0.55 --tolerance 0.15 \
+  --output ./focus-L.png
+```
+
+Wymaga oddzielnej, zgodnej z Androidem instalacji `onnxruntime` i prawdziwych wag ONNX. Automatyczny wybór prawidłowej płaszczyzny ostrości nie został zweryfikowany. Bez modelu użytkownik może dostarczyć lub wyrysować maskę ręcznie.
+
+### Zakres odbioru
+
+Załączone regresje numeryczne obejmują: odwracalną transformację Haar również dla nieparzystych wymiarów, zachowanie bazy poza maską, test zgodności kafelków 16 vs 32 px bez różnic pikselowych, małe end-to-end BigTIFF RGB16 i bezstratny eksport DEFLATE. Nie przeprowadzono pełnego renderu 400 MP na fizycznym Samsungu Galaxy S24 Ultra ani niezweryfikowano prawdziwej inferencji ONNX/GPU. Szczegóły: [ARGON-400MP](docs/requirements/ARGON-400MP.md).
+
