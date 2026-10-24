@@ -401,7 +401,8 @@ def _render_output_tile(source: Source, config: MobileConfig,
     if sr_source is not None:
         from aether.core.wavelet import wavelet_faithful_fusion
         # Candidate may be synthetic. No duplicate optics on candidate.
-        neutral = replace(config, ca_red=0.0, ca_blue=0.0, psf_sigma=0.0, rl_iterations=0)
+        neutral = replace(config, ca_red=0.0, ca_blue=0.0, psf_sigma=0.0,
+                          psf_kernel=None, rl_iterations=0)
         sr_linear = _resample_linear(sr_source, ext, (th,tw), config.input_transfer,
                                      neutral, None, None)
         spatial_mask = _focus_tile(focus_image,ext,(th,tw))
