@@ -23,6 +23,9 @@ aether-cascade = "mobile_s24.s24_cascade:main"
 aether-depth = "aether.vision.depth_cli:main"
 aether-ingest = "aether.ingest.cli:main"
 aether-device-test = "aether.mobile.device_acceptance:main"
+aether-media = "aether.media_cli:main"
+aether-neural-check = "aether.vision.model_acceptance:main"
+aether-gpu-check = "aether.remote.gpu_acceptance:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
