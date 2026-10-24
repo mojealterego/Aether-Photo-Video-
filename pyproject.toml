@@ -17,6 +17,8 @@ test = ["pytest>=8"]
 
 [project.scripts]
 aether = "aether.mobile.cli:main"
+aether-render = "mobile_s24.s24_render:main"
+aether-cascade = "mobile_s24.s24_cascade:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
