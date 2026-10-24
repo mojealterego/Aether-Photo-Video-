@@ -190,7 +190,8 @@ def prepare_focus_mask(config: FocusConfig) -> Path:
 def run_offline_auto(config: FocusConfig, *, output: Path,
                      target_width: int | None = None, target_height: int | None = None,
                      target_mp: float = 400., tile: int = 256, detail_gain: float = .0,
-                     psf_sigma: float = 0., rl_iterations: int = 0,
+                     psf_sigma: float = 0., psf_kernel: Path | None = None,
+                     rl_iterations: int = 0,
                      ca_red: float = 0., ca_blue: float = 0.,
                      reserve_gb: float = 1.) -> dict:
     """Apply global focus to both optical correction and output high-pass."""
@@ -199,7 +200,7 @@ def run_offline_auto(config: FocusConfig, *, output: Path,
                        target_width=target_width, target_height=target_height,
                        target_mp=target_mp, tile_size=tile, detail_gain=detail_gain,
                        focus_mask=mask_path, psf_sigma=psf_sigma,
-                       rl_iterations=rl_iterations, ca_red=ca_red, ca_blue=ca_blue,
+                       psf_kernel=psf_kernel, rl_iterations=rl_iterations, ca_red=ca_red, ca_blue=ca_blue,
                        input_transfer=config.input_transfer,
                        max_input_pixels=config.max_source_pixels,
                        max_decoded_ram_mb=config.max_decoded_mb,
@@ -224,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tile", type=int, default=256)
     parser.add_argument("--detail-gain", type=float, default=0.)
     parser.add_argument("--psf-sigma", type=float, default=0.)
+    parser.add_argument("--psf-kernel", type=Path, help="Measured PSF kernel .npy")
     parser.add_argument("--rl-iterations", type=int, default=0)
     parser.add_argument("--ca-red", type=float, default=0.)
     parser.add_argument("--ca-blue", type=float, default=0.)
@@ -233,7 +235,8 @@ def main(argv: list[str] | None = None) -> int:
     report = run_offline_auto(
         cfg, output=args.output, target_width=args.width, target_height=args.height,
         target_mp=args.target_mp, tile=args.tile, detail_gain=args.detail_gain,
-        psf_sigma=args.psf_sigma, rl_iterations=args.rl_iterations,
+        psf_sigma=args.psf_sigma, psf_kernel=args.psf_kernel,
+        rl_iterations=args.rl_iterations,
         ca_red=args.ca_red, ca_blue=args.ca_blue, reserve_gb=args.reserve_free_gb)
     print(json.dumps(report, indent=2, ensure_ascii=False))
     return 0
