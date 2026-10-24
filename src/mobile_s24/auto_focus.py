@@ -58,7 +58,6 @@ class FocusConfig:
 
 def _preview(source: Source, limit: int, transfer: str) -> np.ndarray:
     """Read bounded image regions; never decode a 400MP RGB32 frame."""
-    import cv2
     scale = min(1., limit / max(source.width, source.height))
     width = max(1, round(source.width * scale))
     height = max(1, round(source.height * scale))
@@ -82,29 +81,53 @@ def _preview(source: Source, limit: int, transfer: str) -> np.ndarray:
             if transfer == "srgb":
                 tile = np.where(tile <= .04045, tile / 12.92,
                                 ((tile + .055) / 1.055) ** 2.4).astype("f4")
-            res = cv2.resize(tile, (x1-x, y1-y), interpolation=cv2.INTER_AREA)
-            if res.ndim != 3 or res.shape[2] != 3:
-                raise ValueError("Expected RGB image source")
+            res = np.stack([
+                np.asarray(Image.fromarray(tile[:, :, k], mode="F").resize(
+                    (x1-x, y1-y), Image.Resampling.BOX), dtype="f4")
+                for k in range(3)
+            ], axis=2)
             image[y:y1, x:x1, :] = res
     return image
 
 
+def _gaussian_blur(gray: np.ndarray, sigma: float) -> np.ndarray:
+    """Separable reflect-padded Gaussian for a bounded preview; no OpenCV."""
+    radius = max(1, math.ceil(3 * sigma))
+    x = np.arange(-radius, radius + 1, dtype=np.float32)
+    kernel = np.exp(-.5 * (x / sigma) ** 2).astype("f4")
+    kernel /= kernel.sum()
+    out = gray.astype("f4")
+    for axis in (0, 1):
+        pads = [(0, 0)] * out.ndim
+        pads[axis] = (radius, radius)
+        src = np.pad(out, pads, mode="reflect")
+        dest = np.zeros_like(out)
+        for n, weight in enumerate(kernel):
+            sl = [slice(None)] * out.ndim
+            sl[axis] = slice(n, n + out.shape[axis])
+            dest += weight * src[tuple(sl)]
+        out = dest
+    return out
+
+
 def _focus_from_preview(preview: np.ndarray, config: FocusConfig,
                         depth: np.ndarray | None) -> np.ndarray:
-    import cv2
-    lum = (preview @ np.array([.2126, .7152, .0722], dtype="f4")).astype("f4")
-    energy = np.abs(lum - cv2.GaussianBlur(lum, (0, 0), 1.))
-    energy += .15 * np.abs(cv2.Laplacian(lum, cv2.CV_32F, ksize=3))
-    energy = cv2.GaussianBlur(energy, (0, 0), 1.35)
+    lum = np.asarray(preview @ np.array([.2126, .7152, .0722], dtype="f4"), dtype="f4")
+    edges = np.abs(lum - _gaussian_blur(lum, 1.))
+    pad = np.pad(lum, 1, mode="reflect")
+    lap = np.abs(4*lum - pad[:-2, 1:-1] - pad[2:, 1:-1]
+                 - pad[1:-1, :-2] - pad[1:-1, 2:])
+    energy = _gaussian_blur(edges + .15 * lap, 1.35)
     p98 = float(np.percentile(energy, 98))
     detail = np.clip(energy / max(p98, 1.e-5), 0., 1.)
-    mask = np.clip((detail - config.energy_threshold) / (1. - config.energy_threshold), 0., 1.)
+    mask = np.clip((detail - config.energy_threshold) /
+                   (1.-config.energy_threshold), 0., 1.)
     if depth is not None:
         if depth.shape != lum.shape or not np.isfinite(depth).all():
             raise ValueError("Invalid relative-depth map")
         plane = np.exp(-.5 * np.square((depth-config.focus_depth) / config.depth_tolerance))
         mask *= plane
-    return np.clip(cv2.GaussianBlur(mask, (0, 0), 1.1), 0., 1.).astype("f4")
+    return np.clip(_gaussian_blur(mask, 1.1), 0., 1.).astype("f4")
 
 
 def prepare_focus_mask(config: FocusConfig) -> Path:
