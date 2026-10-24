@@ -20,6 +20,7 @@ test = ["pytest>=8"]
 aether = "aether.mobile.cli:main"
 aether-render = "mobile_s24.s24_render:main"
 aether-cascade = "mobile_s24.s24_cascade:main"
+aether-depth = "aether.vision.depth_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
