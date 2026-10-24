@@ -39,3 +39,14 @@ A roadmap item is complete only with reproducible evidence, not because source c
 - [x] Establish requirement IDs A400-01..12 and A400-X01..X10.
 - [x] Implement and test disk-backed Gaussian WOLA with normalization exactly once.
 - [ ] Complete remaining A400 requirements and Android/ComfyUI acceptance evidence. See docs/requirements/ARGON-400MP.md.
+
+## Etap bieżący: Argon 400MP
+
+- [x] Wyodrębnienie i rejestr wszystkich wymagań z 64 stron.
+- [x] Migracja lokalnego S24 BigTIFF oraz zamknięcie podstawowej ścieżki CLI `aether restore`.
+- [x] Dodanie modułów optycznych, Depth/Bokeh, WOLA, Frequency Fusion, ArcFace R100 i PSF.
+- [x] Referencyjny JSON ComfyUI z testem statycznym.
+- [ ] Integracja zaawansowanych modułów w jednej ścieżce optycznej bez dublowania algorytmów.
+- [ ] Prawdziwe modele ONNX/ComfyUI oraz testy urządzenia, pełny render 400 MP.
+
+Szczegóły: [stan wdrożenia](ARGON_IMPLEMENTATION_STATUS.md).
