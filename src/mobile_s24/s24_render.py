@@ -64,6 +64,7 @@ class MobileConfig:
     reserve_free_gb: float = 1.0
     keep_stage: bool = False
     contiguous_output: bool = False
+    compression: str = "none"
 
     def __post_init__(self) -> None:
         for name in ('source', 'output', 'stage_dir', 'focus_mask', 'inpainted_base', 'sr_candidate', 'inpaint_mask', 'protected_mask'):
@@ -106,6 +107,8 @@ class MobileConfig:
             raise ValueError('Invalid source pixel or RAM budget')
         if not math.isfinite(self.reserve_free_gb) or self.reserve_free_gb < 0:
             raise ValueError('Invalid free space reserve')
+        if self.compression not in ('none', 'deflate') or (self.contiguous_output and self.compression != 'none'):
+            raise ValueError('Compressed intermediate TIFF cannot be memory mapped; use none')
         if self.input_transfer not in ('srgb', 'linear'):
             raise ValueError('Only sRGB primaries with sRGB or linear transfer are accepted')
 
@@ -435,7 +438,7 @@ def _file_signature(cfg: MobileConfig, tw: int, th: int) -> str:
               'detail_gain': cfg.detail_gain, 'transfer': cfg.input_transfer,
               'psf_sigma': cfg.psf_sigma, 'rl_iterations': cfg.rl_iterations,
               'ca_red': cfg.ca_red, 'ca_blue': cfg.ca_blue,
-              'contiguous_output':cfg.contiguous_output,
+              'contiguous_output':cfg.contiguous_output, 'compression':cfg.compression,
               'program': 'photo400-s24-2.3-cascade'}
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode('utf-8')).hexdigest()
 
@@ -444,7 +447,7 @@ def _icc() -> bytes:
     return ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes()
 
 
-def _write_tiff(stage: np.memmap, path: Path, tile: int) -> None:
+def _write_tiff(stage: np.memmap, path: Path, tile: int, compression: str = "none") -> None:
     h, w = stage.shape[:2]
     part = path.with_name(path.name + '.partial')
     if part.exists():
@@ -460,7 +463,8 @@ def _write_tiff(stage: np.memmap, path: Path, tile: int) -> None:
     try:
         with tifffile.TiffWriter(part, bigtiff=True) as t:
             t.write(data=blocks(), shape=(h, w, 3), dtype=np.uint16,
-                    photometric='rgb', tile=(tile,tile), compression=None,
+                    photometric='rgb', tile=(tile,tile),
+                    compression='deflate' if compression == 'deflate' else None,
                     metadata=None, iccprofile=_icc())
         with tifffile.TiffFile(part) as f:
             p = f.pages[0]
@@ -609,7 +613,7 @@ def run(cfg: MobileConfig) -> dict[str, Any]:
         if cfg.contiguous_output:
             _write_tiff_contiguous(data, cfg.output)
         else:
-            _write_tiff(data, cfg.output, cfg.tile_size)
+            _write_tiff(data, cfg.output, cfg.tile_size, cfg.compression)
         report = {'source_dimensions':[source.width,source.height],
                   'target_dimensions':[tw,th], 'pixels':tw*th,
                   'backend':'cpu_numpy_pillow_tifffile',
@@ -622,6 +626,7 @@ def run(cfg: MobileConfig) -> dict[str, Any]:
                   'inpaint_strength':cfg.inpaint_strength if candidate is not None else 0.,
                   'resumed_from_row':completed,
                   'output':str(cfg.output), 'contiguous_output':cfg.contiguous_output,
+                  'compression':cfg.compression,
                   'size_bytes':cfg.output.stat().st_size,
                   'elapsed_seconds':round(time.monotonic()-t0,2)}
         if not cfg.keep_stage:
@@ -675,6 +680,7 @@ def main() -> int:
     p.add_argument('--max-decoded-mb',type=int,default=900)
     p.add_argument('--reserve-free-gb',type=float,default=1.0)
     p.add_argument('--keep-stage',action='store_true')
+    p.add_argument('--compression',choices=['none','deflate'],default='none')
     p.add_argument('--contiguous-output',action='store_true',
                    help='Memmappable BigTIFF for an intermediate cascade stage')
     args=p.parse_args()
@@ -692,7 +698,7 @@ def main() -> int:
                      max_input_pixels=args.max_source_pixels,
                      max_decoded_ram_mb=args.max_decoded_mb,
                      reserve_free_gb=args.reserve_free_gb,keep_stage=args.keep_stage,
-                     contiguous_output=args.contiguous_output)
+                     contiguous_output=args.contiguous_output,compression=args.compression)
     print(json.dumps(run(cfg),indent=2,ensure_ascii=False))
     return 0
 
