@@ -24,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     restore.add_argument('--height', type=int)
     restore.add_argument('--tile', type=int, default=256)
     restore.add_argument('--detail-gain', type=float, default=0.0)
+    restore.add_argument('--compression', choices=['none','deflate'], default='none')
     restore.add_argument('--psf-sigma', type=float, default=0.0)
     restore.add_argument('--rl-iterations', type=int, default=0)
     restore.add_argument('--ca-red', type=float, default=0.0)
@@ -77,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
                                sr_candidate=args.sr_candidate, wavelet_levels=args.wavelet_levels,
                                wavelet_gain=args.wavelet_gain,
                                protected_mask=args.protected_mask, reserve_free_gb=args.reserve_free_gb,
-                               keep_stage=args.keep_stage)
+                               keep_stage=args.keep_stage, compression=args.compression)
         except ValueError as exc:
             parser.error(str(exc))
         print(json.dumps(run(cfg), indent=2, ensure_ascii=False))
