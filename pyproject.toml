@@ -13,6 +13,7 @@ dependencies = []
 mobile = ["numpy>=1.26", "tifffile>=2024.2", "Pillow>=10"]
 optical = ["opencv-python-headless>=4.8"]
 face-server = ["opencv-python-headless>=4.8", "onnxruntime>=1.18"]
+neural = ["onnxruntime>=1.18"]
 server = ["numpy>=1.26", "tifffile>=2024.2", "opencv-python-headless>=4.8", "torch>=2.2"]
 test = ["pytest>=8"]
 
@@ -22,6 +23,7 @@ aether-render = "mobile_s24.s24_render:main"
 aether-cascade = "mobile_s24.s24_cascade:main"
 aether-depth = "aether.vision.depth_cli:main"
 aether-ingest = "aether.ingest.cli:main"
+aether-codeformer = "aether.vision.codeformer_onnx:main"
 aether-device-test = "aether.mobile.device_acceptance:main"
 aether-media = "aether.media_cli:main"
 aether-neural-check = "aether.vision.model_acceptance:main"
