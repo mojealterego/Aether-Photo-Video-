@@ -112,3 +112,33 @@ identity preservation, or Android NPU acceleration.
 3. ONNX execution with real licensed weights and reviewed mask/alignment quality.
 4. End-to-end ComfyUI GPU inference with exact node versions, model hashes,
    proper server authentication and output fidelity validation.
+
+
+## 5. Current acceptance focus: Nikon NEF (no GUI, no merge)
+
+The current user-provided camera input for acceptance is **Nikon NEF**. Other
+formats remain in the codebase but are not part of this acceptance round.
+Do not infer a camera model from a filename: read the camera model and
+CFA dimensions from the file itself. Never upload a private NEF to a public
+GPU worker without explicit consent.
+
+LibRaw camera-to-sRGB output is tagged with an sRGB ICC profile. The
+`rawpy.postprocess` gamma parameters must be `(2.4, 12.92)` to match the
+sRGB transfer function, not the default `(2.222, 4.5)` curve. The test
+`test_nef_color_transfer.py` guards this contract. This does **not** replace
+a color-chart measurement or per-camera colorimetric validation.
+
+`aether.vision.identity_guard.evaluate_identity_guard` now provides a
+fail-closed policy gate for a CodeFormer candidate and the original face:
+both images need valid five-point landmarks, the same supplied ArcFace
+encoder produces finite 512-dimensional embeddings, and the cosine similarity
+must meet an explicitly supplied calibrated threshold. Passing the veto
+without human approval returns `needs_review`, never `approved`. A failed
+veto returns `rejected` even with human approval. This policy does not
+automatically write to the RGB16 master, prove historical identity, or
+substitute for real-weight ArcFace E2E testing.
+
+The acceptance gate remains **OPEN** until actual licensed Depth Anything,
+ArcFace and CodeFormer weights, a consented authenticated ComfyUI GPU worker,
+and real end-to-end evidence are available. Do not mark a mock or a CI
+unit test as a real neural inference result.
