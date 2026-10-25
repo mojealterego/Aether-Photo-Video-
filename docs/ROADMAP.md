@@ -1,10 +1,17 @@
 # Aether development roadmap
 
+## Current focus (2026-10-25)
+
+- Priority: ICC16 / RAW/DNG import, offline 400 MP reconstruction, optional ComfyUI integration and Depth Anything / ArcFace / CodeFormer model contracts.
+- GUI applications (Android, desktop, web) and installers are **deferred**, not removed from the long-term architecture.
+- New integration details: [ICC16/RAW/ComfyUI/ONNX](INTEGRATION_ICC_RAW_COMFY_NEURAL.md).
+- Real model inference, real GPU ComfyUI E2E and physical S24 Ultra acceptance remain open until evidenced.
+
 ## R0 — bootstrap (this commit)
 - [x] Initialize canonical repository and reference-device architecture.
 - [x] Pure tile partition planner and 400 MP disk-budget estimates.
 - [x] CLI `aether plan`, offline standard-library core tests, Linux CI definition.
-- [ ] Confirm GitHub Actions run and pass on GitHub.
+- [x] Confirm GitHub Actions pass on Python 3.11/3.12 (95 tests per version at commit a658be3).
 
 ## R1 — migrate and audit existing Photo400 (next)
 - [ ] Import previous Photo400 core, Android/Termux code, ComfyUI adapters and tests into separate packages.
@@ -26,7 +33,7 @@
 - [ ] Reproducible GUI/API workflow, per-tile job IDs, checksums and recovery.
 - [ ] Real GPU tests only when a suitable worker exists.
 
-## R4 — multiplatform app and video
+## R4 — video engine active; applications postponed
 - [ ] Choose Android UI stack based on performance profiling (Kotlin/Compose recommended candidate).
 - [ ] Implement thin desktop and web clients using same job schema.
 - [ ] Video: frames, timestamps, scene cuts, temporal stabilization, audio/metadata handling.
