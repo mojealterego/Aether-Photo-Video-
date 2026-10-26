@@ -19,22 +19,37 @@ Reference device: **Samsung Galaxy S24 Ultra (Snapdragon 8 Gen 3 for Galaxy, And
 - Future: still-image pipelines reused for framewise and temporal-aware video processing; audio/video codecs are not included in the initial baseline.
 - Mobile CLI in Termux as the first executable target; later an Android GUI and separate desktop/server clients.
 
-## Architecture
+## Architecture — AETHERIS OmniFlow Ω
+
+Aether is a **single ACE 2.0 system**, developed only in `main`:
+the native OmniGraph IR compiler and Rust control plane, isolated OmegaNode
+workers, camera RAW/NEF processing, RGB16/ICC workflows, native Depth Ω,
+ArcFace/Identity Guard Ω, CodeFormer Ω, Chronos Ledger and the
+AetherCanvas / AWR / SLE / OmniNodes / film-studio subsystems.
 
 ```text
-                  Aether Core (domain + pipeline contracts)
-                                 |
-       +-------------------------+-------------------------+
-       |                         |                         |
- Android / S24 Ultra       Optional GPU worker       Future other platforms
- Termux CLI -> Native      ComfyUI tile-only API     Desktop / Web / iOS
-       |                         |                         |
-  Storage, tiled CPU       Inpaint / tiled diffusion      Shared job schema
-  PSF / wavelet / WOLA     optional ArcFace veto
-  RGB16 BigTIFF
+      Studio UI / S24 Ultra / OCAF OMAs and OMAt
+                        |
+          OmniFlow Omega Control Plane (Rust)
+         typed OmniGraph IR / WFQ / VRAM / policy
+                        |
+         OmegaNode SDK ABI v1.1 (native workers)
+           |              |               |
+        NEF/RGB16       Depth/Face       Video/Audio
+           |              |               |
+         Immutable CAS -> Chronos Ledger -> Export QC
 ```
 
-**400 MP processing remains local for deterministic operations.** Remote neural inference is a separate opt-in capability; no local SDXL execution on the S24 Ultra is assumed.
+**Native OmniFlow is not a ComfyUI wrapper.** Existing older ComfyUI-related
+code remains a transitional, not-yet-migrated component; it cannot be
+counted as proof of the target architecture's independence or GPU E2E.
+No external service receives private NEF files or biometric embeddings
+without explicit consent.
+
+Implementation status and full integration registry:
+[OmniFlow Ω integration ledger](docs/architecture/OMNIFLOW_OMEGA_INTEGRATION.md).
+The architectural source of truth is
+`SYS-AETHERIS-OMNIFLOW-016 v1.1.0` (80-page supplied PDF).
 
 ## Current repository status
 
