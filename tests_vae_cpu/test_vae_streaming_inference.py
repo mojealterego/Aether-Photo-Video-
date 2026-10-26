@@ -26,6 +26,21 @@ class StreamingTests(unittest.TestCase):
         self.assertEqual(result['device'],'cpu')
         self.assertFalse(result['production_approved'])
 
+    def test_sparse_zero_tiles_match_dense_and_count_skips(self):
+        with tempfile.TemporaryDirectory() as d:
+            src=Path(d)/'zeros.npy';dense=Path(d)/'dense.npy';sparse=Path(d)/'sparse.npy'
+            x=np.zeros((32,32,3),dtype='f4');x[0,0]=[.2,.3,.4]
+            np.save(src,x)
+            plan=TilePlanner.build(32,32,tile_core=16,halo=8,base_channels=8,vram_budget_bytes=1<<30)
+            model=torch.nn.Conv2d(3,3,1,bias=False).eval()
+            with torch.no_grad():
+                model.weight.zero_()
+                for i in range(3):model.weight[i,i,0,0]=1
+            run_tiled_neural(src,dense,model,plan,test_only=True)
+            result=run_tiled_neural(src,sparse,model,plan,test_only=True,sparse_zero_tiles=True)
+            np.testing.assert_array_equal(np.load(dense),np.load(sparse))
+            self.assertGreater(result['zero_tiles_elided'],0)
+
     def test_fail_closed_without_production_authorization(self):
         with self.assertRaises(InferenceError):
             run_tiled_neural(self.src,self.dst,torch.nn.Identity().eval(),self.plan)
