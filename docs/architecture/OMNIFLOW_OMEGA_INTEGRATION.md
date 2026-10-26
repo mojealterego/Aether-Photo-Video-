@@ -154,3 +154,28 @@ by Argon will be provided separately and incorporated into native OmniFlow Ω.
 - Identity-sensitive outputs must remain non-final and require explicit review;
   a future author-supplied identity model must undergo independent validation.
 - No branches or PRs. All approved remaining development targets `main`.
+
+## Scalable native engine registry — 2026-10-26
+
+The native engine catalogue and its tests are now in `main`:
+
+- `omniflow-worker/omega_sdk/registry.py`
+- `tests/test_omniflow_registry.py`
+- `docs/architecture/ENGINE_MODULE_CONTRACT_V1.md`
+
+The registry allows exact semver releases to coexist, pins a canonical
+SHA-256 manifest digest, resolves explicit dependency DAGs iteratively
+(1250 engine chain regression), rejects cycles, detects conflicting
+redefinitions, compares semantic port types without implicit
+conversions, and refuses `ON_HOLD`/`PLANNED`/`EXPERIMENTAL`/
+`REVOKED` modules when verified admission is required.
+
+A guarded T0 binder checks the runtime manifest before registering an
+operator in the native worker. It is **not** a substitute for artifact
+signatures, T1/T2 isolation, authoritative trust, model licensing, or
+production admission. No suspended biometric/depth model is activated.
+
+**Local focused verification:** 21 registry tests passed on Python 3.13.
+This does not assert the complete repository suite or GitHub Actions
+passed; those remain independent acceptance gates.
+
