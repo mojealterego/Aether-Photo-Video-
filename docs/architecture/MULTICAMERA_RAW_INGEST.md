@@ -63,3 +63,42 @@ measurements were performed on these sources.
    train weights is inferred from upload.
 
 DA3, CodeFormer and ArcFace remain ON_HOLD pending native replacements.
+
+
+## Canon RAW part 02 — header-aware acceptance (26 October 2026)
+
+A second batch of **10 original user-uploaded files** was tested locally
+using system **LibRaw 0.21.4** by invoking actual open_file, unpack,
+dcraw_process and dcraw_make_mem_image in isolated processes.
+Every decode produced matching buffer size and 16-bit, 3-channel RGB:
+**10/10 PASS**, with original SHA-256 unchanged after decoding.
+
+**Crucial discovery:** a file suffix cannot be trusted as the format.
+The batch contains these signature-detected types:
+
+| Signature-detected class | Count | Decoder result | Admission distinction |
+|---|---:|---|---|
+| Native Canon CR2 TIFF+CR marker | 2 | RGB16 PASS | Recognized container |
+| Legacy Canon CIFF/CRW HEAPCCDR | 1 | RGB16 PASS | Recognized container |
+| DNG with DNGVersion tag | 2 | RGB16 PASS | Recognized container |
+| Headerless camera sensor dumps bearing CR2/CRW suffixes | 5 | RGB16 PASS | **UNVERIFIED**: require extra camera/CHDK-specific checks |
+| **Part 02 total** | **10** | **10/10** | No automatic training consent |
+
+The new standard-library-only classifier
+src/aether/ingest/raw_signature.py distinguishes these kinds
+using bounded 64 KiB header reads, CR2 marker, CIFF HEAPCCDR and
+DNGVersion IFD; it **denies automatic signature admission** for
+headerless dumps and for extension/type mismatch. Regression coverage:
+tests/test_raw_signatures.py (10 synthetic-header tests).
+
+**Cumulative Canon intake:** 20 user-supplied files across two
+batches decoded successfully under the local LibRaw C library.
+The classifier itself does not execute demosaicing. Camera authenticity,
+RAW file rights, correctness of recovered camera color, verified
+ICC/DCP/ACEScg, Android rawpy, complete BigTIFF production
+workflow and GPU E2E remain **unverified**.
+
+Original data, private filenames, per-source SHA-256 and previews
+are not committed into GitHub; all provided media remain
+**VALIDATION_ONLY, NOT APPROVED FOR TRAINING** until separately authorized.
+The Nikon NEF source path and the DA3/CodeFormer/ArcFace freeze remain unchanged.
