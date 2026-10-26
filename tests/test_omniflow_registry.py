@@ -136,6 +136,43 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(plan[0].op_id,'ENGINE_0')
         self.assertEqual(plan[-1].op_id,'ENGINE_1249')
 
+    def test_only_verified_t0_matching_runtime_can_bind(self):
+        from types import SimpleNamespace
+        manifest=SimpleNamespace(op_id='I002_LoadNEF',op_version='1.1.0',
+                                 abi_version='omega.node.abi.v1.1',
+                                 family='SOURCE_AND_COLOR',trust_class='T0_CORE_TRUSTED',
+                                 mode='PURE_DETERMINISTIC')
+        class Node:
+            def manifest(self):return manifest
+        class Server:
+            def __init__(self):self.nodes=[]
+            def register_operator(self,node):self.nodes.append(node)
+        registry=Registry();registry.register(engine())
+        server=Server(); node=Node()
+        registry.register_verified_operator(server,'I002_LoadNEF','1.1.0',node)
+        self.assertEqual(server.nodes,[node])
+        manifest.family='WRONG'
+        with self.assertRaisesRegex(RegistryError,'mismatch'):
+            registry.register_verified_operator(server,'I002_LoadNEF','1.1.0',node)
+        self.assertEqual(server.nodes,[node])
+
+    def test_unknown_or_paused_binding_does_not_execute_node_manifest(self):
+        class Evil:
+            def manifest(self):raise AssertionError('untrusted manifest executed')
+        class Server:
+            def register_operator(self,node):raise AssertionError('registered bad node')
+        r=Registry();r.register(engine(state=EngineStatus.ON_HOLD))
+        with self.assertRaises(RegistryError):
+            r.register_verified_operator(Server(),'I002_LoadNEF','1.1.0',Evil())
+
+    def test_verified_non_t0_cannot_bind_into_local_worker(self):
+        a=replace(engine(),trust_class='T2_UNTRUSTED_OMEGANODE')
+        r=Registry();r.register(a)
+        class Server:
+            def register_operator(self,node):raise AssertionError('unexpected execution')
+        with self.assertRaisesRegex(RegistryError,'isolation'):
+            r.register_verified_operator(Server(),'I002_LoadNEF','1.1.0',object())
+
     def test_only_exact_manifest_abi_is_admissible(self):
         a=engine()
         with self.assertRaises(RegistryError):
