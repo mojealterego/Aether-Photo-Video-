@@ -33,7 +33,7 @@ def decode_libraw_safe(source:str|Path,output:str|Path,*,max_source_pixels:int=4
         if vfs.f_bavail*vfs.f_frsize<w*h*6+int(reserve_free_gb*1024**3):
             raise OSError('Insufficient output disk reserve')
         rgb=decoder.postprocess(output_bps=16,output_color=rawpy.ColorSpace.sRGB,
-                                use_camera_wb=True,no_auto_bright=True,gamma=(2.222,4.5))
+                                use_camera_wb=True,no_auto_bright=True,gamma=(2.4,12.92))
         if rgb.shape!=(h,w,3) or rgb.dtype!=np.dtype('uint16'):
             raise ValueError('Refuse incorrect output or implicit RGB8 quantization')
         icc=ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes()
