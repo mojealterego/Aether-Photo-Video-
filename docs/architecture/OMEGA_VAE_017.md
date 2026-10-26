@@ -204,3 +204,33 @@ environment has no CUDA GPU. The existing Rust Control Plane is
 a library, not a deployed network service.
 
 DA3, CodeFormer and ArcFace remain ON_HOLD.
+
+
+## Media-intake quality gate for future video batches
+
+The native OmegaNode SDK now contains
+\`omniflow-worker/omega_sdk/vae/video_intake.py\` with an FFmpeg-based
+read-only preflight and \`tests/test_vae_video_intake.py\`.
+This module fingerprints media, validates container geometry and
+rational frame rate, optionally performs full audio/video decoding,
+preserves unknown color metadata as **unspecified**, and reports
+TC16 anchor / four-frame group / final-tail accounting.
+
+Upload consent is NOT model-training consent. Therefore all generated
+manifests default to \`VALIDATION_ONLY\`, \`NOT_GRANTED\` training
+permission, and explicitly mark TC16 end-of-stream tails as lossy
+last-frame holds. The manifest is local/private by default; **media,
+filenames, thumbnails and private source digests must not be committed
+into the public repository without an explicit release decision**.
+
+Run on a trusted machine with FFmpeg installed:
+
+\`\`\`bash
+python -m omega_sdk.vae.video_intake --verify-decode --output validation.json source1.mp4 source2.mp4
+\`\`\`
+
+The JSON target is created exclusively and never overwrites an
+existing file. Eight focused acceptance tests validate exact
+temporal accounting, source immutability and container failures.
+This is a corpus admission/preflight gate, **not** trained
+TC16 codec-quality or GPU production certification.
