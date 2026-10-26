@@ -173,7 +173,7 @@ class SafeTensorHeaderValidator:
             if not isinstance(name,str) or not name or not isinstance(info,dict) or set(info)!={'dtype','shape','data_offsets'}:
                 raise ContractError('invalid tensor metadata')
             dtype=info['dtype'];shape=info['shape'];limits=info['data_offsets']
-            if dtype not in cls.ITEM_SIZES or not isinstance(shape,list) or not isinstance(limits,list) or len(limits)!=2:
+            if not isinstance(dtype,str) or dtype not in cls.ITEM_SIZES or not isinstance(shape,list) or not isinstance(limits,list) or len(limits)!=2:
                 raise ContractError('invalid tensor type, shape or offsets')
             if not shape:count=1  # scalar tensors
             else:count=checked_elements(shape,max_elements=cls.MAX_DATA)
