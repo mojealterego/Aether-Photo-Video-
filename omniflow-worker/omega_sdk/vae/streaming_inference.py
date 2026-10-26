@@ -23,7 +23,7 @@ def _sha256(path:Path)->str:
     return h.hexdigest()
 
 def run_tiled_neural(source:Path,destination:Path,model:torch.nn.Module,plan:TilePlan,
-                     *,device:str='cpu',test_only:bool=False,approval=None)->dict:
+                     *,device:str='cpu',test_only:bool=False,approval=None,sparse_zero_tiles:bool=False)->dict:
     """Execute bounded one-tile-at-a-time FP32 RGB inference to .npy memmap.
 
     Production requires an external attested runtime, not a caller-supplied
@@ -53,7 +53,7 @@ def run_tiled_neural(source:Path,destination:Path,model:torch.nn.Module,plan:Til
         if p.device.type!=torch.device(device).type:raise InferenceError('model not on declared execution device')
     partial=destination.with_name(destination.name+'.partial.npy')
     if partial.exists():raise FileExistsError('uncommitted candidate already exists')
-    start=time.perf_counter();tiles_done=0;out=None
+    start=time.perf_counter();tiles_done=0;zero_tiles=0;out=None
     try:
         out=np.lib.format.open_memmap(partial,mode='w+',dtype='float32',shape=src.shape)
         with torch.inference_mode():
@@ -68,7 +68,13 @@ def run_tiled_neural(source:Path,destination:Path,model:torch.nn.Module,plan:Til
                 rgb=prediction[0].permute(1,2,0).float().cpu().numpy()
                 cy0,cy1=tile.core_y0,tile.core_y1
                 cx0,cx1=tile.core_x0,tile.core_x1
-                out[cy0:cy1,cx0:cx1,:]=rgb[cy0-y0:cy1-y0,cx0-x0:cx1-x0,:]
+                core=rgb[cy0-y0:cy1-y0,cx0-x0:cx1-x0,:]
+                if sparse_zero_tiles and not np.any(core):
+                    # Newly-created mmap holes read as zero. Only exact zero
+                    # predictions can be elided; test-only optimization.
+                    zero_tiles+=1
+                else:
+                    out[cy0:cy1,cx0:cx1,:]=core
                 tiles_done+=1
         out.flush();del out;out=None
         with partial.open('rb') as fd:os.fsync(fd.fileno())
@@ -80,6 +86,6 @@ def run_tiled_neural(source:Path,destination:Path,model:torch.nn.Module,plan:Til
         raise
     return {'status':'TEST_ONLY_UNAPPROVED','production_approved':False,
             'device':device,'image_shape':list(src.shape),
-            'tiles_completed':tiles_done,'output_sha256':digest,
+            'tiles_completed':tiles_done,'zero_tiles_elided':zero_tiles,'output_sha256':digest,
             'duration_seconds':round(time.perf_counter()-start,3),
             'gpu_e2e':False,'control_plane_e2e':False}
