@@ -35,6 +35,11 @@ just because an executable architecture class exists.
 - omniflow-worker/omega_sdk/vae/governance.py — TR-0 training sample
   license, consent, color-profile and content/subject/session split gate.
   Source license information is metadata, not independent legal proof.
+- omniflow-worker/omega_sdk/vae/color_hdr.py — signed-log exposure,
+  reference sRGB-linear↔ACEScg matrix (NOT certified OCIO) and safe alpha.
+- omniflow-worker/omega_sdk/vae/losses.py — differentiable photographic
+  Charbonnier, log-luma, Laplacian, FFT, Scharr, KL and uncertainty terms;
+  missing CIEDE2000, optical-flow, learned perceptual and full TR-0–TR-6.
 - omniflow-worker/omega_sdk/vae/neural.py — UNTRAINED Torch 2D
   f_s=8 encoder-decoder with Haar micro path, antialiasing, window-local
   attention, global color descriptor and variance output, Gaussian
@@ -47,12 +52,14 @@ just because an executable architecture class exists.
 
 ## Test evidence (local sandbox, not GPU)
 
-- tests/test_vae_contracts.py: 13 passing contract, model ABI,
+- tests/test_vae_contracts.py: 14 passing contract, model ABI,
   SafeTensor, Ω-R and TR-0 tests.
 - tests/test_vae_ovlt.py: 6 passing transport integrity tests.
+- tests/test_vae_color.py: 5 passing HDR, signed-log and alpha tests.
 - tests_vae_cpu/test_vae_neural.py: 6 passing untrained PyTorch
   shape, uncertainty and causal no-future-leakage tests.
-- Verified locally with Python 3.13, torch 2.10 CPU; 25 tests total.
+- tests_vae_cpu/test_vae_losses.py: 4 passing differentiable loss and adversarial-veto tests.
+- Verified locally with Python 3.13, torch 2.10 CPU; 35 tests total.
 - Separate GitHub Actions CPU VAE job added. Its results remain to
   be inspected; committing a test is not evidence that CI passed.
 
