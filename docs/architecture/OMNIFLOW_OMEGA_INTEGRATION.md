@@ -179,3 +179,29 @@ production admission. No suspended biometric/depth model is activated.
 This does not assert the complete repository suite or GitHub Actions
 passed; those remain independent acceptance gates.
 
+
+
+## Integrated architecture part: AETHERIS Ω-VAE (SYS-AETHERIS-VISION-VAE-017)
+
+The 87-page Argon design has been attached to the **same native OmniFlow Ω
+source tree**, never spun out to a separate app or ComfyUI extension.
+
+Tracked native implementation: omega_sdk/vae/contracts.py, reversible.py,
+governance.py, neural.py, ovlt.py, color_hdr.py and losses.py. The five
+model families P16/G16/TC16/E8/R are defined as contracts; the neural
+topologies are **untrained architectural baselines**.
+
+Local Python 3.13/NumPy/Torch-CPU test status:
+- 25 non-neural tests (14 contract/Ω-R/governance including malformed dtype,
+  6 OVLT, 5 color).
+- 10 PyTorch architecture/loss tests.
+- Total: **35 passing tests** from the local source workspace.
+
+Important: complete GitHub Actions and GPU results are not yet confirmed.
+A passing CPU topology test does **not** prove a trained, calibrated,
+model-signed or production-safe VAE. GPU training, full temporal TC16,
+ΔE00 metrology, tensor-safe certified releases, full 400MP out-of-core
+inference and authenticated engine-runtime admission remain open.
+
+[Detailed Ω-VAE integration and acceptance ledger](OMEGA_VAE_017.md).
+No work on DA3, CodeFormer or ArcFace is resumed.
