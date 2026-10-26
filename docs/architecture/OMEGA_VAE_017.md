@@ -263,3 +263,44 @@ file digests are committed to the public source repository.
 No paid cloud compute, 400 MP GPU E2E, authenticated Control Plane
 deployment, full temporal training campaign, or signed production
 release has occurred. Original user files remain unchanged.
+
+
+## Six-root Drive corpus preparation (2026-10-26)
+
+- The uploader's explicit training permission applies to AETHERIS corpus
+  preparation and experiment planning. It does **not** by itself validate
+  third-party rights, subjects' consent, commercial provenance, or individual
+  images captured at external events. Historical VALIDATION_ONLY wording
+  predates that authorization; it is **superseded for the uploader's scope**
+  but the release and dataset admission gates remain closed.
+- Private metadata inventory: six Google Drive roots with a minimum of
+  13,126 files / 478,257,134,363 bytes; 12,359 NEF, 243 DNG, 95 RAF,
+  428 JPG and one MP4 (lower bound). This metadata was read using the
+  connected Drive tool, not by downloading photo content.
+- 103 first-level photo folders plus the direct-video root = **104 groups**.
+  One group exceeded Google Drive's 1000-file listing boundary, so the
+  historic inventory is a **lower bound**, not an exhaustive per-file catalog.
+- `omega_sdk/vae/drive_corpus.py` creates a private folder-level manifest
+  from the verified inventory and an explicit consent record. It supports
+  read-only recursive Google Drive v3 listing with **page tokens** via
+  separately configured read-only application-default credentials.
+  **The full authenticated scan has not run in this execution environment.**
+  Per-file SHA-256 and complete remote manifests remain outstanding.
+- Provisional group-level deterministic train/val/test hints are **NOT**
+  approved final splits. Duplicate source files, capture sessions and subjects
+  must be grouped across all six roots before final assignment; Drive MD5
+  is a duplicate hint, not a cryptographic replacement for source SHA-256.
+  Missing source rights and color calibration also deny release.
+- 43 separate media attachments are locally available (22 AI-generated MP4,
+  10 CRW, 6 CR2, 4 DNG, 1 Nikon NEF). These are **not** counted inside the
+  13,126+ remote Drive items until content deduplication. Local full-byte
+  SHA-256 has been computed for each; there were no exact duplicate digests
+  among those 43 attachments.
+- No original media, private Drive identifiers, per-file names, checkpoint,
+  keys, or private manifests are stored in this GitHub repository.
+- No bulk remote-media download, production GPU training, external paid
+  GPU spend or Control Plane E2E has been performed as part of this intake.
+
+The test module `tests/test_vae_drive_corpus.py` has synthetic
+metadata and pagination fixtures only. Running tests locally on the
+development copy does not establish a green GitHub Actions build.
