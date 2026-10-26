@@ -205,3 +205,29 @@ inference and authenticated engine-runtime admission remain open.
 
 [Detailed Ω-VAE integration and acceptance ledger](OMEGA_VAE_017.md).
 No work on DA3, CodeFormer or ArcFace is resumed.
+
+## Ω-VAE-017 acceptance extension — 2026-10-26
+
+Continued implementation in the same repository and native runtime:
+
+- `omega_sdk/vae/tiling_plan.py` — planned bounded core + halo tiles
+  for 400 MP, with O(tile-count) exact partition verification and
+  explicit VRAM estimate (heuristic, not measured).
+- `omega_sdk/vae/deltae.py` — tested CIEDE2000 on explicit CIE Lab
+  inputs (Sharma reference pairs). ACEScg(D60) color conversion to
+  adapted Lab under reference conditions remains a separate gate.
+- `omega_sdk/vae/model_admission.py` — trusted Ed25519 model bundle
+  verifier, latent/color contracts, local .safetensors SHA256 and
+  header validation. Cryptographic admission does not verify trained
+  model quality; bundle signer/trust store and filesystem immutability
+  require governed production deployment.
+
+Tests: 42 regular Ω-VAE, 4 CPU neural and 8 security = **54 local
+tests passed**, plus compileall. Separate `vae-security` CI job
+has been added but a green remote Actions result is not established.
+
+Implementation details and outstanding acceptance:
+[OMEGA_VAE_017.md](OMEGA_VAE_017.md).
+
+All three postponed model families (DA3, CodeFormer and ArcFace) remain
+unmodified and unactivated pending Argon-provided replacements.
