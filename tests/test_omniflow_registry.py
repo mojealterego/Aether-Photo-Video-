@@ -127,6 +127,15 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(RegistryError,'missing port'):
             r.validate_link(('I002_LoadNEF','1.1.0'),'rgb',('TARGET','1.1.0'),'frame')
 
+    def test_deep_chain_planning_does_not_exhaust_python_stack(self):
+        r=Registry()
+        for i in range(1250):
+            r.register(engine(f'ENGINE_{i}', deps=((f'ENGINE_{i-1}','1.1.0'),) if i else ()))
+        plan=r.plan(('ENGINE_1249','1.1.0'))
+        self.assertEqual(len(plan),1250)
+        self.assertEqual(plan[0].op_id,'ENGINE_0')
+        self.assertEqual(plan[-1].op_id,'ENGINE_1249')
+
     def test_only_exact_manifest_abi_is_admissible(self):
         a=engine()
         with self.assertRaises(RegistryError):
