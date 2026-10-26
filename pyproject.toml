@@ -17,6 +17,7 @@ server = ["numpy>=1.26", "tifffile>=2024.2", "opencv-python-headless>=4.8", "tor
 test = ["pytest>=8"]
 omniflow = ["numpy>=1.26", "tifffile>=2024.2", "Pillow>=10", "scipy>=1.11"]
 vae-security = ["cryptography>=45"]
+vae-training = ["safetensors>=0.4.5"]
 
 [project.scripts]
 aether = "aether.mobile.cli:main"
