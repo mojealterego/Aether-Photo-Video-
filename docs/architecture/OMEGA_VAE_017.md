@@ -234,3 +234,32 @@ existing file. Eight focused acceptance tests validate exact
 temporal accounting, source immutability and container failures.
 This is a corpus admission/preflight gate, **not** trained
 TC16 codec-quality or GPU production certification.
+
+
+## Explicit training authorization and initial private pilot — 2026-10-26
+
+The uploader explicitly granted training permission during this project's
+conversation. This authorizes dataset preparation and experimental training,
+but does **not** independently certify ownership, third-party portrait
+consent, generator terms, commercial sublicensing, or rights for every
+media file in the approximately 478 GB six-folder archive. Maintain
+per-sample governance and disjoint train/val/test groups.
+
+A local offline **CPU-only Ω-TC16 experimental learning run** was
+performed with **three distinct user-uploaded AI-generated videos for
+training** and **one different video held out for evaluation**.
+The tiny engineering fixture used 9 frames per clip, 32×32 RGB,
+16 latent channels, base channels 4, and 12 optimizer steps.
+The single-clip held-out RGB MSE was 0.2871491 before optimization
+and 0.2519282 afterward. Those figures **do not establish
+model quality, generalization, camera color accuracy or temporal
+fidelity**; the generated videos are not camera ground truth.
+
+Private checkpoint: SafeTensors, 28 tensors, verified strict reload.
+It is **UNAPPROVED_EXPERIMENT**, not an attested or published release.
+Neither the user's media, private training manifest, weights, nor
+file digests are committed to the public source repository.
+
+No paid cloud compute, 400 MP GPU E2E, authenticated Control Plane
+deployment, full temporal training campaign, or signed production
+release has occurred. Original user files remain unchanged.
