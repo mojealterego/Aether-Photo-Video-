@@ -28,9 +28,9 @@ for the source document, GPU evidence, or a production certification.
 | Tenant-scoped content-addressed artifact storage | `omniflow-worker/omega_sdk/protocol.py` | BASIC FILESYSTEM CAS; NO MULTIHOST |
 | Nikon NEF 16-bit ingest | `src/aether/ingest/libraw_adapter.py`, `omniflow-worker/omega_sdk/photo_faithful_400mp.py` | sRGB transfer fix and native linear-sRGB NEF node; actual LibRaw E2E pending |
 | Faithful 400 MP, tile coverage and BigTIFF | `omniflow-worker/omega_sdk/photo_faithful_400mp.py`, `optics.py` | NATIVE DISK-BACKED STITCHING, OETF, ICC16 TIFF + bounded RL/CA; full 400MP E2E pending |
-| Depth Ω / Depth Anything 3 | Native `Depth` OmegaNode | NOT IMPLEMENTED; weights/E2E pending |
+| Depth Ω / Depth Anything 3 | `omniflow-worker/omega_sdk/vision_native.py` | NATIVE DA3 OUTPUT/CONF CAS ADAPTER + LOCAL MODEL LOADER; real weights/GPU E2E pending |
 | ArcFace Ω / Identity Guard Ω | `src/aether/vision/identity_guard.py`, `omniflow-worker/omega_sdk/identity_guard.py` | NATIVE ABSTAIN/DRIFT/HUMAN-APPROVAL POLICY; actual ArcFace embedding inference pending |
-| CodeFormer Ω and inpainting | Native face-restoration OmegaNode | NOT IMPLEMENTED; licensing and weights pending |
+| CodeFormer Ω and inpainting | `omniflow-worker/omega_sdk/vision_native.py` | NATIVE PYTORCH CODEFORMER FACE CANDIDATE ADAPTER; true model E2E/licensing and dedicated inpainting pending |
 | AVS / ASS / GLS | Native digital human/world operators | NOT IMPLEMENTED |
 | Dual-GGUF, Wan / Temporal VAE, 30-agent studio | `omniflow-worker/omega_sdk/llm_and_video_adapters.py` | NOT IMPLEMENTED |
 | Chronos Ledger PostgreSQL / RLS / outbox | `sql/001_omniflow_ledger.sql` | DDL AND RLS SMOKE TEST COMMITTED; production DB integration and results pending |
@@ -73,9 +73,8 @@ tracks the incremental execution status. No broad claim that the entire
 ## Latest execution evidence (2026-10-26)
 
 - Local Python OmegaNode, NEF contract, weighted TIFF, identity, and optics tests
-  were executed in the assistant's temporary workspace. 32 Python unit
-  tests + 2 subtests passed before the C5 checks; 5 additional C5 tests
-  passed. These are not hardware/model-weight acceptance tests.
+  were executed in the assistant's temporary workspace. 44 Python
+  unit tests + 2 subtests passed in the latest full native local run. These are not hardware/model-weight acceptance tests.
 - A new Rust 2024 Cargo crate and GitHub Actions Rust test/clippy job were
   committed on `main`; their remote result has not been confirmed here.
 - PostgreSQL 16 test service + tenant-RLS SQL smoke are configured in CI;
@@ -94,3 +93,47 @@ The next mandatory acceptance gates are: Rust build/CI evidence,
 PostgreSQL RLS proof, real NEF + ICC chart proof, native scheduler↔worker↔CAS
 RPC E2E, license-approved real DA3/ArcFace/CodeFormer weights, and a secured
 GPU run (only with explicit authorization to transfer photographs).
+
+## Native executable NEF baseline
+
+After an environment has LibRaw-compatible `rawpy` installed:
+
+```bash
+pip install -e ".[mobile,omniflow]"
+aether-omniflow-nef --nef ./camera.nef --output ./camera-rgb16.tif --tile 512 --overlap 128
+```
+
+This is a cohesive first-stage invocation:
+`I002_LoadNEF` -> linear-sRGB float32 -> disk-backed weighted tile
+compositor -> explicit IEC 61966-2-1 OETF -> display-sRGB ICC16 BigTIFF.
+It preserves the original NEF and refuses to overwrite the requested
+output. The provenance reports both SHA-256 digests.
+
+The command currently produces output at **native input dimensions**.
+It does **not** perform upscale/super-resolution to 400 MP, claim
+restored documentary detail, validate chart ΔE, or run neural inference.
+The integrated CLI test uses an injected synthetic LibRaw decoder and
+is not a substitute for actual Nikon D810/D750 acceptance.
+
+## Neural checkpoint adapters — explicit restrictions
+
+- `DepthOmega`: signed/scoped CAS RGB8 preview -> DA3 inference ->
+  relative depth/confidence `float32` stored as immutable NPZ. Relative
+  depth is never silently interpreted as metric depth.
+- `CodeFormerOmega`: pre-aligned 512x512 display-sRGB face ->
+  CodeFormer checkpoint output -> immutable candidate PNG explicitly
+  marked `NEEDS_REVIEW` and `identity_verified=false`.
+- Local checkpoint loading requires an existing weight file and
+  user-supplied SHA-256; no automatic remote model/photo upload.
+- Neural adapters were tested against injected fakes. They have NOT
+  run actual model weights, on real faces, or through a GPU in this run.
+- ComfyUI is not used by these native modules.
+- CodeFormer S-Lab noncommercial restrictions and ArcFace weight rights
+  must be checked before commercial deployment.
+
+## Current recorded local test result
+
+The native Python test suite through the integrated NEF CLI contains
+**44 passing tests and 2 passing subtests** (local Python 3.13).
+Remote GitHub Actions Rust/Python/PostgreSQL results and actual GPU
+results remain unverified.
