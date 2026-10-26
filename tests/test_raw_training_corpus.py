@@ -4,7 +4,7 @@ from omega_sdk.vae.raw_training_corpus import (
     CorpusSource,TrainingGrant,build_split_plan,CorpusAdmissionError
 )
 
-ROOT='1mXYIzmwk0cenHX70ByT3ibyCzTpyNqNk'
+ROOT='synthetic-test-root-0001'
 GRANT=TrainingGrant(ROOT,True,'PHOTO_VAE_TRAINING','USER_EXPLICIT_CHAT_CONSENT')
 def source(n,folder=None,digest=None,ext='.NEF'):
     return CorpusSource(file_id=f'file{n}',folder_id=folder or f'folder{n%6}',
