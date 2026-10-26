@@ -47,6 +47,11 @@ class Contracts(unittest.TestCase):
             with self.subTest(header=header),self.assertRaises(ContractError):
                 SafeTensorHeaderValidator.inspect(struct.pack('<Q',len(raw))+raw+bytes(2))
         with self.assertRaises(ContractError):SafeTensorHeaderValidator.inspect(struct.pack('<Q',100*1024*1024+1))
+    def test_safetensors_rejects_unhashable_dtype_with_contract_error(self):
+        raw=json.dumps({'x':{'dtype':[],'shape':[1],'data_offsets':[0,1]}}).encode()
+        with self.assertRaises(ContractError):
+            SafeTensorHeaderValidator.inspect(struct.pack('<Q',len(raw))+raw+b'x')
+
     def test_safetensors_rejects_duplicate_json_keys(self):
         raw=b'{"x":{"dtype":"U8","shape":[1],"data_offsets":[0,1]},"x":{"dtype":"U8","shape":[1],"data_offsets":[0,1]}}'
         with self.assertRaises(ContractError):SafeTensorHeaderValidator.inspect(struct.pack('<Q',len(raw))+raw+b'1')
