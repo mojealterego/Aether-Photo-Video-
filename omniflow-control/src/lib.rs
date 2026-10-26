@@ -4,3 +4,4 @@
 pub mod ir;
 pub mod compiler;
 pub mod scheduler;
+pub mod security;
