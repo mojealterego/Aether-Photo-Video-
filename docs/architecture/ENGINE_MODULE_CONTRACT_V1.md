@@ -79,3 +79,17 @@ The catalog does not replace the unfinished Rust compiler, PostgreSQL
 scheduler persistence, OMAs/OMAt authorisation, T1/T2 isolation, KMS/HSM,
 model and plugin attestations, or real GPU/400MP E2E. See
 `OMNIFLOW_OMEGA_INTEGRATION.md` for acceptance status.
+
+## Shared temporal semantics
+
+A native rational video/audio timebase is implemented as
+`omega_sdk.media_timebase.RationalTimebase`, `FrameStamp`,
+`rescale_timestamp`, and explicit decode/presentation timestamp
+validators. These avoid floating-point drift, cover 1001/24000 second
+frame steps and 48000 Hz audio sample clocks exactly, reject overflow,
+and permit legitimate B-frame PTS reordering in decode order.
+Reference test: `tests/test_omniflow_media_timebase.py`.
+
+This is a reusable timing primitive for future AWR, Wan/TemporalVAE,
+OmniNodes Export and cinematographic agent engines; it is not a
+finished codec pipeline or evidence of actual audio/video E2E.
