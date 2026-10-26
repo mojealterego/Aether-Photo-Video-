@@ -139,3 +139,68 @@ Remain open: real neural 400MP rendering, true GPU benchmark,
 complete TC16 temporal anchor model and other trained profiles,
 camera-chart color accuracy, trusted model promotion and OmniFlow E2E.
 DA3, CodeFormer and ArcFace remain ON_HOLD.
+
+
+## Continuation: temporal codec, streaming neural inference, color evidence (2026-10-26)
+
+- TC16 topology: omega_sdk/vae/temporal_tc16.py.
+  Anchor frame plus four-frame causal groups, f_s=8, f_t=4,
+  stateful encode/decode, reset on scene cuts and differentiable
+  reconstruction. Unlike naive per-chunk padding, this preserves
+  one-shot versus streaming latent equivalence. It has a 3-frame
+  group latency; an incomplete end-of-stream group is predicted
+  by last-frame hold and is explicitly lossy. The topology is
+  trainable but is NOT a trained/approved TC16 release.
+- Streaming inference: omega_sdk/vae/streaming_inference.py.
+  Actual disk-backed float32 tile execution through torch,
+  halo and disjoint core publication, finite-result checks,
+  atomic output, output SHA-256 and exact-zero sparse test
+  optimization. Test-only inference is permitted; production
+  is deliberately denied without attested model approval.
+- Color: omega_sdk/vae/color_measure.py.
+  Relative CIEDE2000 between ICC-tagged RGB16 sRGB TIFF and
+  explicitly sRGB-assumed JPEG. This is NOT calibrated Nikon
+  camera ΔE or an OCIO certification.
+- Training: omega_sdk/vae/training_tc16.py.
+  Governance-checked synthetic-only smoke training and
+  SafeTensors output. This is not the TR-1..TR-6 training
+  campaign, and synthetic checkpoints are not promoted.
+- New tests: 8 TC16 + 6 neural tiling + 3 color QC +
+  3 synthetic training = 20 focused CPU tests, run locally
+  together with 0 failures. The existing repository suite
+  and remote GitHub Actions have not been rerun in this
+  local execution environment.
+
+### Executed real-data acceptance
+
+Nikon NEF SHA-256:
+9da1a6f8ad5909cc6711dd474a05d2d9fe4e0dd32156d1de46cc9762dea53428
+
+Existing RGB16 TIFF SHA-256:
+61c16b3d9d20e984d0c822e4d1c1e4fdf3c634de493cbf5ffbd89037698cc0d0
+
+The TIFF is 6032 × 4032 RGB16 with embedded sRGB ICC.
+CameraWB JPEG relative mean ΔE00 = 0.9147, P95 = 2.2982;
+final JPEG mean ΔE00 = 3.4996, P95 = 5.9162.
+All results are relative render comparisons, not chart accuracy.
+
+CPU PyTorch untrained identity Conv2d on 24.3 MP Nikon-derived
+scene-linear FP32: 96 tiles, 3.256 seconds, maximum absolute
+error 0, peak RSS about 1004 MiB.
+
+Synthetic 100 MP: 400 tiles, 13.369 seconds, 397 exact-zero
+output tiles safely elided. Full 400 MP CPU attempts timed out.
+No successful 400 MP neural E2E is claimed.
+
+[Complete evidence and blockers](../verification/OMEGA_VAE_017_REAL_EVIDENCE_20261026.md).
+
+### Production blockers
+
+Real temporal training corpus and train/val/test rights, approved
+weights, trained VAE GPU/400 MP validation, independent release
+signing, calibrated color chart, live authenticated Rust Control
+Plane service and GPU worker E2E remain outstanding. This local
+environment has no CUDA GPU. The existing Rust Control Plane is
+a library, not a deployed network service.
+
+DA3, CodeFormer and ArcFace remain ON_HOLD.
