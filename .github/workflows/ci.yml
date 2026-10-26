@@ -16,14 +16,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: sudo apt-get update && sudo apt-get install -y liblcms2-2 ffmpeg
-      - run: python -m pip install -e ".[mobile,optical]"
-      - run: python -m compileall -q src omniflow-worker
+      - run: python -m pip install -e ".[mobile,optical,omniflow]"
+      - run: python -m compileall -q src omniflow-worker ci
       - run: python -m unittest discover -s tests -v
         env:
           PYTHONPATH: src
       - run: python -m aether.mobile.cli plan --width 6000 --height 4000 --target-mp 400
         env:
           PYTHONPATH: src
+
+      - run: python ci/verify_zero_comfy_c5.py
 
   rust-control:
     name: OmniFlow Rust 2024 control plane
@@ -33,3 +35,36 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --manifest-path omniflow-control/Cargo.toml --all-targets
       - run: cargo clippy --manifest-path omniflow-control/Cargo.toml --all-targets -- -D warnings
+
+  postgres-ledger:
+    name: OmniFlow PostgreSQL RLS smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: omniflow_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d omniflow_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: omniflow_test
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: psql -v ON_ERROR_STOP=1 -f sql/001_omniflow_ledger.sql
+      - run: |
+          psql -v ON_ERROR_STOP=1 -c "CREATE ROLE omniflow_tester NOLOGIN"
+          psql -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA omniflow TO omniflow_tester"
+          psql -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA omniflow TO omniflow_tester"
+      - run: psql -v ON_ERROR_STOP=1 -f sql/test_omniflow_rls.sql
