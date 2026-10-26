@@ -28,7 +28,7 @@ aether-neural-check = "aether.vision.model_acceptance:main"
 aether-gpu-check = "aether.remote.gpu_acceptance:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "omniflow-worker"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
