@@ -28,9 +28,9 @@ for the source document, GPU evidence, or a production certification.
 | Tenant-scoped content-addressed artifact storage | `omniflow-worker/omega_sdk/protocol.py` | BASIC FILESYSTEM CAS; NO MULTIHOST |
 | Nikon NEF 16-bit ingest | `src/aether/ingest/libraw_adapter.py`, `omniflow-worker/omega_sdk/photo_faithful_400mp.py` | sRGB transfer fix and native linear-sRGB NEF node; actual LibRaw E2E pending |
 | Faithful 400 MP, tile coverage and BigTIFF | `omniflow-worker/omega_sdk/photo_faithful_400mp.py`, `optics.py` | NATIVE DISK-BACKED STITCHING, OETF, ICC16 TIFF + bounded RL/CA; full 400MP E2E pending |
-| Depth Ω / Depth Anything 3 | `omniflow-worker/omega_sdk/vision_native.py` | NATIVE DA3 OUTPUT/CONF CAS ADAPTER + LOCAL MODEL LOADER; real weights/GPU E2E pending |
-| ArcFace Ω / Identity Guard Ω | `src/aether/vision/identity_guard.py`, `omniflow-worker/omega_sdk/identity_guard.py` | NATIVE ABSTAIN/DRIFT/HUMAN-APPROVAL POLICY; actual ArcFace embedding inference pending |
-| CodeFormer Ω and inpainting | `omniflow-worker/omega_sdk/vision_native.py` | NATIVE PYTORCH CODEFORMER FACE CANDIDATE ADAPTER; true model E2E/licensing and dedicated inpainting pending |
+| Depth Ω / autorski silnik Argona | `omniflow-worker/omega_sdk/vision_native.py` (dotychczasowy kod referencyjny) | WSTRZYMANE: oczekiwanie na autorską specyfikację i implementację Argona; DA3 nie jest aktualnym celem integracji |
+| Autorska weryfikacja tożsamości Argona / Identity Guard Ω | `src/aether/vision/identity_guard.py`, `omniflow-worker/omega_sdk/identity_guard.py` (obecna polityka bezpieczeństwa) | WSTRZYMANE: bez integracji ArcFace; zachowujemy ogólną politykę ABSTAIN/REVIEW, czekamy na autorski model Argona |
+| Autorska rekonstrukcja twarzy Argona / inpainting | `omniflow-worker/omega_sdk/vision_native.py` (dotychczasowy kod referencyjny) | WSTRZYMANE: bez integracji CodeFormer, oczekiwanie na własny silnik Argona |
 | AVS / ASS / GLS | Native digital human/world operators | NOT IMPLEMENTED |
 | Dual-GGUF, Wan / Temporal VAE, 30-agent studio | `omniflow-worker/omega_sdk/llm_and_video_adapters.py` | NOT IMPLEMENTED |
 | Chronos Ledger PostgreSQL / RLS / outbox | `sql/001_omniflow_ledger.sql` | DDL AND RLS SMOKE TEST COMMITTED; production DB integration and results pending |
@@ -137,3 +137,20 @@ The native Python test suite through the integrated NEF CLI contains
 **44 passing tests and 2 passing subtests** (local Python 3.13).
 Remote GitHub Actions Rust/Python/PostgreSQL results and actual GPU
 results remain unverified.
+
+## Temporary freeze: DA3, CodeFormer, ArcFace
+
+Instruction from the project owner: **do not implement, integrate, optimize, or run**
+Depth Anything 3, CodeFormer or ArcFace for now. Proprietary replacements designed
+by Argon will be provided separately and incorporated into native OmniFlow Ω.
+
+- Existing reference adapters and tests remain in Git history and source;
+  they are not approved as target engines and must not be extended or
+  advertised as production implementation.
+- No model checkpoint downloads, GPU tests, conversions or dependency updates
+  for these three components before the Argon designs arrive.
+- Do not block unrelated infrastructure work (native Rust control plane,
+  Chronos Ledger, NEF/ICC16, photo tiling, CAS, security, CI) on these models.
+- Identity-sensitive outputs must remain non-final and require explicit review;
+  a future author-supplied identity model must undergo independent validation.
+- No branches or PRs. All approved remaining development targets `main`.
