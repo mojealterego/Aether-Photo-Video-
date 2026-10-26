@@ -89,3 +89,53 @@ just because an executable architecture class exists.
 
 This record distinguishes actual committed code from outstanding tests and
 does not claim a fully trained or hardware-certified VAE.
+
+## Stage 017 extension: native tiling, CIEDE2000 and signed model releases
+
+The following source files and tests were committed directly to main.
+
+### 400MP tile planning
+
+- Source: omniflow-worker/omega_sdk/vae/tiling_plan.py
+- Regression: tests/test_vae_tiling_plan.py (7 tests).
+- Deterministic grid with core and halo coordinates; validates approximately
+  400MP image 24495 x 16329, 16-channel f_s=8 latent geometry, and
+  exact full-frame core partition without a dense framebuffer.
+- Peak VRAM is a conservative HEURISTIC, not a profiled GPU bound.
+  Neither neural inference nor reconstruction is executed by this planner.
+
+### CIEDE2000 metrology
+
+- Source: omniflow-worker/omega_sdk/vae/deltae.py
+- Regression: tests/test_vae_deltae.py (4 tests, 10 Sharma reference pairs).
+- Operates exclusively on explicit CIE L*a*b* arrays, never raw ACEScg
+  channels. Proper color-managed D60 ACEScg to D65 Lab adaptation still
+  requires validation with reference color targets; no camera Delta-E
+  chart result or OCIO certification is claimed.
+
+### Trusted model release admission
+
+- Source: omniflow-worker/omega_sdk/vae/model_admission.py
+- Regression: tests_vae_security/test_vae_model_admission.py (8 tests).
+- Adds independent Ed25519 signer verification using a trusted runtime
+  public-key allowlist; pins VAE ABI, latent and color contract digests,
+  local safetensors checkpoint SHA-256 and shape/offset validation;
+  refuses path traversal, symlinks, untrained status and denied commercial
+  use. Ed25519 is a deliberate ADDITIVE hardening to the PDF's HMAC
+  proposal, not falsely described as identical to its wire protocol.
+- Publisher-supplied TRAINED_SIGNED_VALIDATED status and signature are
+  evidence of asserted provenance, NOT model training quality certification.
+  Trust-store governance, immutable filesystem enforcement and multi-host
+  release attestation are independent future gates.
+
+### Verification and CI
+
+Local: 42 non-security regular tests + 4 neural/loss tests + 8 new
+model admission tests = **54 focused Ω-VAE tests**. Separate GitHub
+Actions vae-security job added for cryptography dependency. CI success
+has not been established by committing the workflow.
+
+Remain open: real neural 400MP rendering, true GPU benchmark,
+complete TC16 temporal anchor model and other trained profiles,
+camera-chart color accuracy, trusted model promotion and OmniFlow E2E.
+DA3, CodeFormer and ArcFace remain ON_HOLD.
