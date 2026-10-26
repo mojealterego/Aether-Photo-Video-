@@ -253,6 +253,30 @@ class Registry:
         if x!=y:
             raise RegistryError('semantic type mismatch; explicit adapter required')
 
+    def register_verified_operator(self, server: Any, op_id: str,
+                                   op_version: str, node: Any) -> None:
+        """Admit an already-trusted T0 instance into a local worker.
+
+        Descriptor evidence is metadata, not cryptographic attestation of the
+        supplied Python object. Only trusted code may call this binder.
+        """
+        descriptor=self.resolve(op_id,op_version,require_verified=True)
+        if descriptor.trust_class!='T0_CORE_TRUSTED':
+            raise RegistryError('T1/T2 isolation required before binding')
+        try:
+            manifest=node.manifest()
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise RegistryError('invalid trusted worker manifest') from exc
+        for attr, expected in (
+            ('op_id',descriptor.op_id),('op_version',descriptor.op_version),
+            ('abi_version',descriptor.abi_version),('family',descriptor.family),
+            ('mode',descriptor.mode),('trust_class',descriptor.trust_class),
+        ):
+            actual=getattr(manifest,attr,None)
+            if getattr(actual,'value',actual)!=expected:
+                raise RegistryError(f'worker manifest mismatch: {attr}')
+        server.register_operator(node)
+
     def find_capability(self,capability:str,*,require_verified:bool=False) -> tuple[EngineDescriptor,...]:
         _capability(capability)
         return tuple(d for d in self.list_all() if capability in d.capabilities and
