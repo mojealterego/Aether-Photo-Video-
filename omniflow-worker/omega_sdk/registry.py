@@ -218,23 +218,24 @@ class Registry:
         visited:set[tuple[str,str]]=set()
         active:set[tuple[str,str]]=set()
         order:list[EngineDescriptor]=[]
-
-        def visit(key:tuple[str,str]) -> None:
+        stack=[(root, False)]
+        while stack:
+            key, expanded=stack.pop()
+            if expanded:
+                active.remove(key)
+                visited.add(key)
+                order.append(self._entries[key])
+                continue
+            if key in visited:
+                continue
             if key in active:
                 raise RegistryError('dependency cycle')
-            if key in visited:
-                return
             if key not in self._entries:
                 raise RegistryError('missing dependency or operator')
             node=self.resolve(key[0],key[1],require_verified=require_verified)
             active.add(key)
-            for dependency in sorted(node.dependencies):
-                visit(dependency)
-            active.remove(key)
-            visited.add(key)
-            order.append(node)
-
-        visit(root)
+            stack.append((key, True))
+            stack.extend((dep, False) for dep in reversed(sorted(node.dependencies)))
         return tuple(order)
 
     def validate_link(self, source:tuple[str,str], source_port:str,
