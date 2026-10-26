@@ -27,6 +27,7 @@ aether-device-test = "aether.mobile.device_acceptance:main"
 aether-media = "aether.media_cli:main"
 aether-neural-check = "aether.vision.model_acceptance:main"
 aether-gpu-check = "aether.remote.gpu_acceptance:main"
+aether-omniflow-nef = "omega_sdk.photo_pipeline:main"
 
 [tool.setuptools.packages.find]
 where = ["src", "omniflow-worker"]
