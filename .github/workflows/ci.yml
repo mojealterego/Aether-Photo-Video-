@@ -24,3 +24,12 @@ jobs:
       - run: python -m aether.mobile.cli plan --width 6000 --height 4000 --target-mp 400
         env:
           PYTHONPATH: src
+
+  rust-control:
+    name: OmniFlow Rust 2024 control plane
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path omniflow-control/Cargo.toml --all-targets
+      - run: cargo clippy --manifest-path omniflow-control/Cargo.toml --all-targets -- -D warnings
