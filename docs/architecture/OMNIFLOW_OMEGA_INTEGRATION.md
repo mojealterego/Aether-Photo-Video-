@@ -231,3 +231,23 @@ Implementation details and outstanding acceptance:
 
 All three postponed model families (DA3, CodeFormer and ArcFace) remain
 unmodified and unactivated pending Argon-provided replacements.
+
+
+## Ω-VAE-017 native continuation — 2026-10-26
+
+New native modules in omega_sdk/vae:
+temporal_tc16.py (trainable anchor/causal 4:1 temporal codec),
+streaming_inference.py (real disk-backed PyTorch tiled inference,
+fail-closed production gate), color_measure.py (ICC RGB16/JPEG
+relative ΔE00), training_tc16.py (synthetic-only SafeTensors smoke).
+
+20 newly added CPU tests passed locally. Real Nikon-derived
+24.3 MP CPU inference: 96 tiles, 3.256 seconds, exact identity
+Conv2d result. Synthetic 100 MP CPU stress: 400 tiles,
+13.369 seconds. Full 400 MP stress timed out; GPU and live
+Control Plane E2E have NOT been executed. No production weights
+or absolute color calibration are approved.
+
+Evidence: ../verification/OMEGA_VAE_017_REAL_EVIDENCE_20261026.md.
+The integration remains one OmniFlow Ω source tree on main,
+with DA3, CodeFormer and ArcFace still ON_HOLD.
