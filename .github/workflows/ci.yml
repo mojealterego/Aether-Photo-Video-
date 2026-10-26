@@ -68,3 +68,16 @@ jobs:
           psql -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA omniflow TO omniflow_tester"
           psql -v ON_ERROR_STOP=1 -c "GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA omniflow TO omniflow_tester"
       - run: psql -v ON_ERROR_STOP=1 -f sql/test_omniflow_rls.sql
+
+  vae-cpu:
+    name: Aetheris Omega-VAE CPU architecture tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e ".[omniflow]"
+      - run: python -m compileall -q omniflow-worker/omega_sdk/vae
+      - run: python -m unittest discover -s tests_vae_cpu -v
