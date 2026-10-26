@@ -1,0 +1,20 @@
+[package]
+name = "omniflow-control"
+version = "1.1.0"
+edition = "2024"
+publish = false
+description = "AETHERIS OmniFlow Omega: typed native DAG control plane"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+petgraph = "0.7"
+thiserror = "2"
+parking_lot = "0.12"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+serde_json = "1"
