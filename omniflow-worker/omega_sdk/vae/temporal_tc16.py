@@ -2,8 +2,9 @@
 
 f_s=8, f_t=4 after first anchor. A latent group for source frames 1..4
 is emitted only after all four frames arrive (3-frame group lookahead).
-At EOS an incomplete group has no latent; missing tail is explicitly
-predicted by last-frame hold. This is lossy, never archival or bit-exact.
+Legacy EOS mode drops an incomplete group and predicts tail via hold.
+Optional encode_eos_tail mode emits one additional padded group latent;
+this is lossy, not archival or bit-exact.
 Streaming states are local to one model and one clip, not thread safe.
 """
 from __future__ import annotations
@@ -76,13 +77,16 @@ class TemporalVAE16(nn.Module):
     source group is omitted (spec: Tz=1+floor((T-1)/4)). The decoder's
     final missing 1-3 frames are explicitly a last-frame prediction.
     """
-    def __init__(self,base_channels:int=48,latent_channels:int=16,model_id:str='aethervae-tc16-v1'):
+    def __init__(self,base_channels:int=48,latent_channels:int=16,model_id:str='aethervae-tc16-v1',*,encode_eos_tail:bool=False):
         super().__init__()
         if type(base_channels)!=int or base_channels<4 or type(latent_channels)!=int or latent_channels<1 or not model_id:
             raise TemporalContractError('invalid TC16 architecture')
         self.base_channels=base_channels
         self.latent_channels=latent_channels
         self.model_id=model_id
+        if type(encode_eos_tail) is not bool:
+            raise TemporalContractError('boolean EOS policy required')
+        self.encode_eos_tail=encode_eos_tail
         c=base_channels
         self.stem=nn.Sequential(
             nn.Conv2d(3,c,3,stride=2,padding=1),nn.SiLU(),
@@ -142,6 +146,17 @@ class TemporalVAE16(nn.Module):
             mixed,state.history=self.enc_causal(grouped,state.history)
             outputs.append(self.group_to_moments(F.silu(mixed)))
         state.pending=features[:,:,n*4:]
+        if finalize and self.encode_eos_tail and state.pending.shape[2]:
+            # Emit an extra encoded latent for 1-3 real tail frames.
+            # The missing group positions are replicated only to form
+            # a complete temporal convolution input. Real frame changes
+            # influence the latent rather than being lost on EOS.
+            remaining=state.pending
+            missing=4-remaining.shape[2]
+            filled=torch.cat((remaining,remaining[:,:,-1:].expand(-1,-1,missing,-1,-1)),dim=2)
+            reduced=self.group_reduce(filled)
+            mixed,state.history=self.enc_causal(reduced,state.history)
+            outputs.append(self.group_to_moments(F.silu(mixed)))
         state.frame_index+=t
         if finalize:
             state.pending=None
@@ -184,6 +199,15 @@ class TemporalVAE16(nn.Module):
         if finalize:
             if target_frames is not None:
                 extra=target_frames-state.emitted
+                if self.encode_eos_tail and -3<=extra<0:
+                    # The final incomplete source group emits a full
+                    # four-frame prediction. Drop only the synthetic
+                    # padded positions in the last decoder chunk.
+                    if recon.shape[2]<4:
+                        raise TemporalContractError('EOS crop cannot affect prior chunks')
+                    recon=recon[:,:,:extra]
+                    state.emitted+=extra
+                    extra=0
                 if extra<0 or extra>3 or (extra and state.last_frame is None):
                     raise TemporalContractError('invalid EOS tail; cannot predict beyond 3 frames')
                 if extra:
