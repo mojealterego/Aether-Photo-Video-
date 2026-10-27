@@ -304,3 +304,57 @@ release has occurred. Original user files remain unchanged.
 The test module `tests/test_vae_drive_corpus.py` has synthetic
 metadata and pagination fixtures only. Running tests locally on the
 development copy does not establish a green GitHub Actions build.
+
+
+## Executed no-paid-infrastructure CPU video training — 2026-10-27
+
+This entry records a **completed real CPU training run** of the native
+AETHERIS TC16 topology. It must not be confused with production approval.
+
+- Input: **22 user-uploaded AI-generated MP4 files** with explicit
+  uploader training authorization.
+- Split: **16 train / 3 validation / 3 held-out test clips**, disjoint
+  by actual source SHA-256. Capture/subject overlap between different
+  clips remains **unverified**.
+- FFmpeg preprocessing: sampling at **4 FPS**, aspect-preserving letterbox
+  to **96 × 96 RGB**. Per-item TC16 time span: 9 frames = anchor
+  plus two full four-frame groups.
+- Training samples: **49 train windows**, **9 validation windows**,
+  **9 held-out test windows**.
+- Configuration: **16 latent channels**, 24 base channels,
+  **60,067 trainable parameters**, CPU-only AdamW, LR 0.001,
+  pixel MSE + 0.05 temporal-derivative MSE + 1e-6 KL.
+- **2,400 optimizer steps executed** in 176.192 seconds wall time,
+  no GPU instance and **no paid infrastructure**.
+- Validation MSE before **0.1523678121**, after **0.0111103707**
+  (PSNR after **19.54271452 dB**).
+- Held-out test MSE **0.0129574301**; PSNR **18.87481124 dB**.
+  Anchor-first-frame hold baseline test MSE **0.02981374697**.
+- Saved experimental SafeTensors checkpoint: **242,876 bytes**,
+  SHA-256
+  `1f97e65be56d2a41b1e8628eed56e2f70a51fb7f3904eb46e92918bfb6bd6a90`.
+  Exact tensor round-trip, strict state loading and held-out metric
+  after reload were verified.
+- Train-runner acceptance: 8/8 local tests passing.
+  For trained weights, full vs chunked encode yielded 0 maximum
+  latent difference; full vs chunked decode maximum difference
+  2.38418579e-7. No future leakage in the tested prefix.
+- Visual audit of a held-out reconstruction showed **significant blur
+  and loss of fine detail**. Low-resolution MSE improvements do not
+  establish usable cinematic fidelity.
+
+**Artifacts:** private user-delivered ZIP contains weight file, model
+source copy, offline training runner, source tests, split/digest
+evidence, complete metric history, test-only comparisons and
+checkpoint acceptance report. Original videos, private filenames,
+original checksums and weights are **not in this public repository**.
+
+**Still open / NOT certified:** 24-FPS full-resolution temporal quality;
+camera RAW training and DCP/ICC/ACEScg color validation; 478+ GB Drive
+content enumeration/download and licensing; strict session/subject
+holdout; 1–3 EOS frame tail loss; production-weight signature and
+model admission; Control Plane and GPU E2E. Native DA3/CodeFormer/ArcFace
+replacements remain frozen.
+
+Status: `CPU_TRAINING_EXPERIMENT_COMPLETED` +
+`PRODUCTION_APPROVAL_DENIED`.
